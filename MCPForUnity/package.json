@@ -1,18 +1,24 @@
 {
   "name": "com.besty.unity-skills",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "UnitySkills",
-  "description": "REST API for AI to control Unity Editor. AI generates minimal Python scripts to create objects, modify scenes, and automate workflows.",
+  "description": "AI-powered Unity Editor control via REST API and MCP. Features both simplified Skills REST endpoints and full MCP toolset for automated scene manipulation, asset management, and script editing.",
   "unity": "2021.3",
   "documentationUrl": "https://github.com/Besty0728/unity-mcp-skill",
+  "licensesUrl": "https://github.com/Besty0728/unity-mcp-skill/blob/main/LICENSE",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  },
   "keywords": [
     "unity",
     "ai",
     "skills",
     "rest-api",
+    "mcp",
     "automation"
   ],
   "author": {
-    "name": "Besty"
+    "name": "Besty",
+    "url": "https://github.com/Besty0728"
   }
 }

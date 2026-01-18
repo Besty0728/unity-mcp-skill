@@ -1,6 +1,6 @@
 {
     "name": "UnitySkills.Editor",
-    "rootNamespace": "UnitySkills.Editor",
+    "rootNamespace": "UnitySkills",
     "references": [],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],

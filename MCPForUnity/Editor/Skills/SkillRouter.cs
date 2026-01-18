@@ -3,20 +3,31 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
-namespace UnitySkills.Editor
+namespace UnitySkills
 {
     /// <summary>
-    /// Routes requests to skill methods.
+    /// Routes REST API requests to skill methods.
     /// </summary>
     public static class SkillRouter
     {
-        private static Dictionary<string, MethodInfo> _skills;
+        private static Dictionary<string, SkillInfo> _skills;
+        private static bool _initialized;
+
+        private class SkillInfo
+        {
+            public string Name;
+            public string Description;
+            public MethodInfo Method;
+            public ParameterInfo[] Parameters;
+        }
 
         public static void Initialize()
         {
-            if (_skills != null) return;
-            _skills = new Dictionary<string, MethodInfo>(StringComparer.OrdinalIgnoreCase);
+            if (_initialized) return;
+            _skills = new Dictionary<string, SkillInfo>(StringComparer.OrdinalIgnoreCase);
 
             var allTypes = AppDomain.CurrentDomain.GetAssemblies()
                 .Where(a => !a.IsDynamic)
@@ -30,103 +41,124 @@ namespace UnitySkills.Editor
                     if (attr != null)
                     {
                         var name = attr.Name ?? ToSnakeCase(method.Name);
-                        _skills[name] = method;
+                        _skills[name] = new SkillInfo
+                        {
+                            Name = name,
+                            Description = attr.Description ?? "",
+                            Method = method,
+                            Parameters = method.GetParameters()
+                        };
                     }
                 }
             }
-            Debug.Log($"[UnitySkills] Found {_skills.Count} skills");
+            _initialized = true;
+            Debug.Log($"[UnitySkills] Discovered {_skills.Count} skills");
         }
 
         public static string GetManifest()
         {
             Initialize();
-            var skills = _skills.Select(kv =>
+            var manifest = new
             {
-                var attr = kv.Value.GetCustomAttribute<UnitySkillAttribute>();
-                var ps = kv.Value.GetParameters().Select(p => new
+                version = "1.1.0",
+                totalSkills = _skills.Count,
+                skills = _skills.Values.Select(s => new
                 {
-                    name = p.Name,
-                    type = GetType(p.ParameterType),
-                    required = !p.HasDefaultValue
-                });
-                return new { name = kv.Key, description = attr?.Description ?? "", parameters = ps };
-            });
-            return ToJson(new { version = "1.0", skills });
+                    name = s.Name,
+                    description = s.Description,
+                    parameters = s.Parameters.Select(p => new
+                    {
+                        name = p.Name,
+                        type = GetJsonType(p.ParameterType),
+                        required = !p.HasDefaultValue,
+                        defaultValue = p.HasDefaultValue ? p.DefaultValue?.ToString() : null
+                    })
+                })
+            };
+            return JsonConvert.SerializeObject(manifest, Formatting.Indented);
         }
 
         public static string Execute(string name, string json)
         {
             Initialize();
-            if (!_skills.TryGetValue(name, out var method))
-                return ToJson(new { error = $"Skill '{name}' not found" });
+            if (!_skills.TryGetValue(name, out var skill))
+            {
+                return JsonConvert.SerializeObject(new
+                {
+                    status = "error",
+                    error = $"Skill '{name}' not found",
+                    availableSkills = _skills.Keys.Take(20).ToArray()
+                });
+            }
 
             try
             {
-                var args = ParseJson(json);
-                var ps = method.GetParameters();
+                var args = string.IsNullOrEmpty(json) ? new JObject() : JObject.Parse(json);
+                var ps = skill.Parameters;
                 var invoke = new object[ps.Length];
 
                 for (int i = 0; i < ps.Length; i++)
                 {
                     var p = ps[i];
-                    if (args.TryGetValue(p.Name, out var val))
-                        invoke[i] = Convert.ChangeType(val, p.ParameterType);
+                    if (args.TryGetValue(p.Name, StringComparison.OrdinalIgnoreCase, out var token))
+                    {
+                        invoke[i] = token.ToObject(p.ParameterType);
+                    }
                     else if (p.HasDefaultValue)
+                    {
                         invoke[i] = p.DefaultValue;
+                    }
+                    else if (!p.ParameterType.IsValueType || Nullable.GetUnderlyingType(p.ParameterType) != null)
+                    {
+                        invoke[i] = null;
+                    }
                     else
-                        return ToJson(new { error = $"Missing: {p.Name}" });
+                    {
+                        return JsonConvert.SerializeObject(new
+                        {
+                            status = "error",
+                            error = $"Missing required parameter: {p.Name}"
+                        });
+                    }
                 }
 
-                var result = method.Invoke(null, invoke);
-                return ToJson(new { status = "success", result });
+                var result = skill.Method.Invoke(null, invoke);
+                return JsonConvert.SerializeObject(new { status = "success", result });
+            }
+            catch (TargetInvocationException ex)
+            {
+                var inner = ex.InnerException ?? ex;
+                return JsonConvert.SerializeObject(new
+                {
+                    status = "error",
+                    error = inner.Message
+                });
             }
             catch (Exception ex)
             {
-                return ToJson(new { error = ex.InnerException?.Message ?? ex.Message });
+                return JsonConvert.SerializeObject(new { status = "error", error = ex.Message });
             }
+        }
+
+        public static void Refresh()
+        {
+            _initialized = false;
+            _skills = null;
+            Initialize();
         }
 
         private static string ToSnakeCase(string s) =>
             System.Text.RegularExpressions.Regex.Replace(s, "([a-z])([A-Z])", "$1_$2").ToLower();
 
-        private static string GetType(Type t)
+        private static string GetJsonType(Type t)
         {
-            if (t == typeof(string)) return "string";
-            if (t == typeof(int) || t == typeof(long)) return "integer";
-            if (t == typeof(float) || t == typeof(double)) return "number";
-            if (t == typeof(bool)) return "boolean";
+            var underlying = Nullable.GetUnderlyingType(t) ?? t;
+            if (underlying == typeof(string)) return "string";
+            if (underlying == typeof(int) || underlying == typeof(long)) return "integer";
+            if (underlying == typeof(float) || underlying == typeof(double)) return "number";
+            if (underlying == typeof(bool)) return "boolean";
+            if (underlying.IsArray) return "array";
             return "object";
         }
-
-        private static string ToJson(object obj)
-        {
-            return JsonUtility.ToJson(new Wrapper { data = obj.ToString() });
-        }
-
-        private static Dictionary<string, object> ParseJson(string json)
-        {
-            var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrEmpty(json)) return dict;
-            
-            json = json.Trim();
-            if (!json.StartsWith("{")) return dict;
-            
-            json = json.Substring(1, json.Length - 2);
-            foreach (var pair in json.Split(','))
-            {
-                var kv = pair.Split(new[] { ':' }, 2);
-                if (kv.Length == 2)
-                {
-                    var key = kv[0].Trim().Trim('"');
-                    var val = kv[1].Trim().Trim('"');
-                    if (float.TryParse(val, out var f)) dict[key] = f;
-                    else dict[key] = val;
-                }
-            }
-            return dict;
-        }
-
-        [Serializable]
-        private class Wrapper { public string data; }
     }
 }

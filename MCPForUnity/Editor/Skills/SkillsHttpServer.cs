@@ -4,8 +4,9 @@ using System.Text;
 using System.Threading;
 using UnityEditor;
 using UnityEngine;
+using Newtonsoft.Json;
 
-namespace UnitySkills.Editor
+namespace UnitySkills
 {
     /// <summary>
     /// Embedded HTTP server for UnitySkills REST API.
@@ -26,7 +27,7 @@ namespace UnitySkills.Editor
             EditorApplication.quitting += Stop;
         }
 
-        [MenuItem("Window/UnitySkills/Start Server")]
+        [MenuItem("Window/UnitySkills/Start REST Server")]
         public static void Start()
         {
             if (_isRunning)
@@ -45,7 +46,8 @@ namespace UnitySkills.Editor
                 _listenerThread = new Thread(ListenLoop) { IsBackground = true };
                 _listenerThread.Start();
 
-                Debug.Log($"[UnitySkills] Server started at {_prefix}");
+                Debug.Log($"[UnitySkills] REST Server started at {_prefix}");
+                Debug.Log($"[UnitySkills] {SkillRouter.GetManifest().Split('\n').Length} skills available");
             }
             catch (Exception ex)
             {
@@ -54,7 +56,7 @@ namespace UnitySkills.Editor
             }
         }
 
-        [MenuItem("Window/UnitySkills/Stop Server")]
+        [MenuItem("Window/UnitySkills/Stop REST Server")]
         public static void Stop()
         {
             if (!_isRunning) return;
@@ -108,24 +110,25 @@ namespace UnitySkills.Editor
                 }
                 else if (path.StartsWith("/skill/") && request.HttpMethod == "POST")
                 {
-                    var skillName = path.Substring(7);
+                    var skillName = request.Url.AbsolutePath.Substring(7); // Keep original case
                     var body = new System.IO.StreamReader(request.InputStream).ReadToEnd();
                     result = ExecuteOnMainThread(skillName, body);
                 }
                 else if (path == "/" || path == "/health")
                 {
-                    result = "{\"status\":\"ok\",\"service\":\"UnitySkills\"}";
+                    SkillRouter.Initialize();
+                    result = JsonConvert.SerializeObject(new { status = "ok", service = "UnitySkills", version = "1.1.0" });
                 }
                 else
                 {
                     response.StatusCode = 404;
-                    result = "{\"error\":\"Not found\"}";
+                    result = JsonConvert.SerializeObject(new { error = "Not found", endpoints = new[] { "GET /skills", "POST /skill/{name}" } });
                 }
             }
             catch (Exception ex)
             {
                 response.StatusCode = 500;
-                result = $"{{\"error\":\"{ex.Message}\"}}";
+                result = JsonConvert.SerializeObject(new { error = ex.Message });
             }
 
             response.ContentType = "application/json";
@@ -143,12 +146,12 @@ namespace UnitySkills.Editor
             EditorApplication.delayCall += () =>
             {
                 try { result = SkillRouter.Execute(skillName, args); }
-                catch (Exception ex) { result = $"{{\"error\":\"{ex.Message}\"}}"; }
+                catch (Exception ex) { result = JsonConvert.SerializeObject(new { error = ex.Message }); }
                 finally { wait.Set(); }
             };
 
             wait.WaitOne(30000);
-            return result ?? "{\"error\":\"Timeout\"}";
+            return result ?? JsonConvert.SerializeObject(new { error = "Timeout" });
         }
     }
 }
