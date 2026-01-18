@@ -80,7 +80,7 @@ namespace MCPForUnity.Editor.Tools
                     })
                     .ToList();
 
-                // Discover tools
+                // Discover class-based tools
                 var toolTypes = allTypes.Where(t => t.GetCustomAttribute<McpForUnityToolAttribute>() != null);
                 int toolCount = 0;
                 foreach (var type in toolTypes)
@@ -98,13 +98,28 @@ namespace MCPForUnity.Editor.Tools
                         resourceCount++;
                 }
 
-                McpLog.Info($"Auto-discovered {toolCount} tools and {resourceCount} resources ({_handlers.Count} total handlers)");
+                // Discover method-based skills (new UnitySkill)
+                int skillCount = 0;
+                foreach (var type in allTypes)
+                {
+                    var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .Where(m => m.GetCustomAttribute<UnitySkillAttribute>() != null);
+
+                    foreach (var method in methods)
+                    {
+                        if (RegisterSkillMethod(method))
+                            skillCount++;
+                    }
+                }
+
+                McpLog.Info($"Auto-discovered {toolCount} tools, {resourceCount} resources, {skillCount} skills ({_handlers.Count} total handlers)");
             }
             catch (Exception ex)
             {
                 McpLog.Error($"Failed to auto-discover MCP commands: {ex.Message}");
             }
         }
+
 
         /// <summary>
         /// Register a command type (tool or resource) with the registry.
@@ -186,6 +201,108 @@ namespace MCPForUnity.Editor.Tools
                 McpLog.Error($"Failed to register {typeLabel} {type.Name}: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Register a method marked with [UnitySkill] attribute.
+        /// Creates a dynamic invoker that handles parameter binding from JSON.
+        /// </summary>
+        private static bool RegisterSkillMethod(MethodInfo method)
+        {
+            try
+            {
+                var skillAttr = method.GetCustomAttribute<UnitySkillAttribute>();
+                if (skillAttr == null) return false;
+
+                string commandName = skillAttr.Name;
+                if (string.IsNullOrEmpty(commandName))
+                {
+                    commandName = ToSnakeCase(method.Name);
+                }
+
+                if (_handlers.ContainsKey(commandName))
+                {
+                    McpLog.Warn($"Duplicate command name '{commandName}' from skill method {method.DeclaringType?.Name}.{method.Name}");
+                }
+
+                var invoker = CreateSkillInvoker(method);
+                var handlerInfo = new HandlerInfo(commandName, invoker, null);
+                _handlers[commandName] = handlerInfo;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"Failed to register skill method {method.Name}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates a dynamic invoker for a skill method.
+        /// Handles JSON to C# parameter conversion and result wrapping.
+        /// </summary>
+        private static Func<JObject, object> CreateSkillInvoker(MethodInfo method)
+        {
+            var parameters = method.GetParameters();
+
+            return (JObject args) =>
+            {
+                try
+                {
+                    object[] invokeArgs = new object[parameters.Length];
+
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        var param = parameters[i];
+                        var paramType = param.ParameterType;
+
+                        if (args.TryGetValue(param.Name, out var token))
+                        {
+                            invokeArgs[i] = token.ToObject(paramType);
+                        }
+                        else if (param.HasDefaultValue)
+                        {
+                            invokeArgs[i] = param.DefaultValue;
+                        }
+                        else if (Nullable.GetUnderlyingType(paramType) != null || !paramType.IsValueType)
+                        {
+                            invokeArgs[i] = null;
+                        }
+                        else
+                        {
+                            return new { status = "error", error = $"Missing required parameter: {param.Name}" };
+                        }
+                    }
+
+                    object result = method.Invoke(null, invokeArgs);
+
+                    // Wrap result in success response
+                    if (result == null)
+                    {
+                        return new { status = "success", message = "Skill executed successfully" };
+                    }
+
+                    // If result is already a response object, return as-is
+                    if (result is MCPForUnity.Editor.Helpers.SuccessResponse || 
+                        result is MCPForUnity.Editor.Helpers.ErrorResponse)
+                    {
+                        return result;
+                    }
+
+                    return new { status = "success", result };
+                }
+                catch (TargetInvocationException ex)
+                {
+                    var inner = ex.InnerException ?? ex;
+                    McpLog.Error($"Skill execution error: {inner.Message}");
+                    return new { status = "error", error = inner.Message, stackTrace = inner.StackTrace };
+                }
+                catch (Exception ex)
+                {
+                    McpLog.Error($"Skill invocation error: {ex.Message}");
+                    return new { status = "error", error = ex.Message };
+                }
+            };
         }
 
         /// <summary>

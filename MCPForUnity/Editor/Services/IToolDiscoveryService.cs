@@ -18,7 +18,18 @@ namespace MCPForUnity.Editor.Services
         public bool RequiresPolling { get; set; } = false;
         public string PollAction { get; set; } = "status";
         public bool IsBuiltIn { get; set; }
+
+        /// <summary>
+        /// True if this tool is a method-based UnitySkill (vs class-based McpForUnityTool)
+        /// </summary>
+        public bool IsSkillMethod { get; set; } = false;
+
+        /// <summary>
+        /// Name of the method to invoke for skill methods
+        /// </summary>
+        public string SkillMethodName { get; set; }
     }
+
 
     /// <summary>
     /// Metadata for a tool parameter

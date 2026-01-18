@@ -23,6 +23,7 @@ namespace MCPForUnity.Editor.Services
 
             _cachedTools = new Dictionary<string, ToolMetadata>();
 
+            // Discover class-based tools (legacy McpForUnityTool)
             var toolTypes = TypeCache.GetTypesWithAttribute<McpForUnityToolAttribute>();
             foreach (var type in toolTypes)
             {
@@ -50,9 +51,13 @@ namespace MCPForUnity.Editor.Services
                 }
             }
 
-            McpLog.Info($"Discovered {_cachedTools.Count} MCP tools via reflection");
+            // Discover method-based skills (new UnitySkill)
+            int skillCount = DiscoverSkillMethods();
+
+            McpLog.Info($"Discovered {_cachedTools.Count} MCP tools ({skillCount} skills) via reflection");
             return _cachedTools.Values.ToList();
         }
+
 
         public ToolMetadata GetToolMetadata(string toolName)
         {
@@ -216,6 +221,107 @@ namespace MCPForUnity.Editor.Services
 
             return result;
         }
+
+        /// <summary>
+        /// Discover all static methods marked with [UnitySkill] attribute.
+        /// </summary>
+        private int DiscoverSkillMethods()
+        {
+            int count = 0;
+            try
+            {
+                var allTypes = AppDomain.CurrentDomain.GetAssemblies()
+                    .Where(a => !a.IsDynamic)
+                    .SelectMany(a =>
+                    {
+                        try { return a.GetTypes(); }
+                        catch { return new Type[0]; }
+                    });
+
+                foreach (var type in allTypes)
+                {
+                    var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .Where(m => m.GetCustomAttribute<UnitySkillAttribute>() != null);
+
+                    foreach (var method in methods)
+                    {
+                        var metadata = ExtractSkillMetadata(method);
+                        if (metadata != null && !_cachedTools.ContainsKey(metadata.Name))
+                        {
+                            _cachedTools[metadata.Name] = metadata;
+                            EnsurePreferenceInitialized(metadata);
+                            count++;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"Failed to discover skill methods: {ex.Message}");
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Extract metadata from a method marked with [UnitySkill].
+        /// </summary>
+        private ToolMetadata ExtractSkillMetadata(MethodInfo method)
+        {
+            try
+            {
+                var skillAttr = method.GetCustomAttribute<UnitySkillAttribute>();
+                if (skillAttr == null) return null;
+
+                string skillName = skillAttr.Name;
+                if (string.IsNullOrEmpty(skillName))
+                {
+                    skillName = ConvertToSnakeCase(method.Name);
+                }
+
+                string description = skillAttr.Description ?? $"Skill: {skillName}";
+
+                // Extract parameters from method signature
+                var parameters = new List<ParameterMetadata>();
+                foreach (var param in method.GetParameters())
+                {
+                    var paramAttr = param.GetCustomAttribute<SkillParameterAttribute>();
+                    bool isNullable = Nullable.GetUnderlyingType(param.ParameterType) != null || !param.ParameterType.IsValueType;
+                    bool required = paramAttr?.Required ?? !isNullable;
+
+                    parameters.Add(new ParameterMetadata
+                    {
+                        Name = param.Name,
+                        Description = paramAttr?.Description ?? $"Parameter: {param.Name}",
+                        Type = GetParameterType(param.ParameterType),
+                        Required = required,
+                        DefaultValue = paramAttr?.DefaultValue
+                    });
+                }
+
+                var declaringType = method.DeclaringType;
+                return new ToolMetadata
+                {
+                    Name = skillName,
+                    Description = description,
+                    StructuredOutput = skillAttr.StructuredOutput,
+                    Parameters = parameters,
+                    ClassName = declaringType?.Name ?? "",
+                    Namespace = declaringType?.Namespace ?? "",
+                    AssemblyName = declaringType?.Assembly.GetName().Name ?? "",
+                    AutoRegister = skillAttr.AutoRegister,
+                    RequiresPolling = false,
+                    PollAction = "status",
+                    IsSkillMethod = true,
+                    SkillMethodName = method.Name
+                };
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"Failed to extract skill metadata for {method.Name}: {ex.Message}");
+                return null;
+            }
+        }
+
 
         public void InvalidateCache()
         {
