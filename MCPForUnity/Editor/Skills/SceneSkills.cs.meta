@@ -1,12 +1,11 @@
 fileFormatVersion: 2
-guid: f6789012345678ab00000000
+guid: f6789012345678abcdef0123456789ab
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
   defaultReferences: []
   executionOrder: 0
   icon: {instanceID: 0}
-  userData:
-  assetBundleName:
-  assetBundleVariant:
-
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
