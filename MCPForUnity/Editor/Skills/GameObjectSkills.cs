@@ -57,23 +57,50 @@ namespace UnitySkills
             return new { success = true, deleted = deletedName };
         }
 
-        [UnitySkill("gameobject_find", "Find GameObjects by name, tag, or component")]
-        public static object GameObjectFind(string name = null, string tag = null, string component = null, int limit = 50)
+        [UnitySkill("gameobject_find", "Find GameObjects by name/regex, tag, layer, or component")]
+        public static object GameObjectFind(string name = null, bool useRegex = false, string tag = null, string layer = null, string component = null, int limit = 50)
         {
-            IEnumerable<GameObject> results = Object.FindObjectsOfType<GameObject>();
+            // Efficiency: If tag is provided, use FindGameObjectsWithTag (faster).
+            // But we need to filter further anyway.
+            IEnumerable<GameObject> results;
+            if (!string.IsNullOrEmpty(tag))
+                results = GameObject.FindGameObjectsWithTag(tag);
+            else
+                results = Object.FindObjectsOfType<GameObject>();
 
+            // Filter by Name (Regex or Contains)
             if (!string.IsNullOrEmpty(name))
-                results = results.Where(go => go.name.Contains(name));
-
+            {
+                if (useRegex)
+                {
+                    var regex = new System.Text.RegularExpressions.Regex(name);
+                    results = results.Where(go => regex.IsMatch(go.name));
+                }
+                else
+                {
+                    results = results.Where(go => go.name.Contains(name));
+                }
+            }
+            
+            // Filter by Tag (if not already fetched by tag - double check in case we fell back)
             if (!string.IsNullOrEmpty(tag))
                 results = results.Where(go => go.CompareTag(tag));
+                
+            // Filter by Layer
+            if (!string.IsNullOrEmpty(layer))
+            {
+                int layerId = LayerMask.NameToLayer(layer);
+                if (layerId != -1)
+                    results = results.Where(go => go.layer == layerId);
+            }
 
+            // Filter by Component
             if (!string.IsNullOrEmpty(component))
             {
                 var compType = System.Type.GetType(component) ?? 
                     System.AppDomain.CurrentDomain.GetAssemblies()
                         .SelectMany(a => { try { return a.GetTypes(); } catch { return new System.Type[0]; } })
-                        .FirstOrDefault(t => t.Name == component);
+                        .FirstOrDefault(t => t.Name == component || t.FullName == component);
                 
                 if (compType != null)
                     results = results.Where(go => go.GetComponent(compType) != null);
@@ -85,6 +112,7 @@ namespace UnitySkills
                 instanceId = go.GetInstanceID(),
                 path = GameObjectFinder.GetPath(go),
                 tag = go.tag,
+                layer = LayerMask.LayerToName(go.layer),
                 position = new { x = go.transform.position.x, y = go.transform.position.y, z = go.transform.position.z }
             }).ToArray();
 
