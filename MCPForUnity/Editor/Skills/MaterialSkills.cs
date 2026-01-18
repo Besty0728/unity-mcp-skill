@@ -47,7 +47,7 @@ namespace UnitySkills
             
             // Use material instance to avoid modifying shared material
             Undo.RecordObject(renderer, "Set Material Color");
-            renderer.material.SetColor(propertyName, color);
+            renderer.sharedMaterial.SetColor(propertyName, color);
 
             return new { success = true, gameObject = gameObjectName, color = new { r, g, b, a } };
         }
@@ -68,7 +68,7 @@ namespace UnitySkills
                 return new { error = $"Texture not found: {texturePath}" };
 
             Undo.RecordObject(renderer, "Set Texture");
-            renderer.material.SetTexture(propertyName, texture);
+            renderer.sharedMaterial.SetTexture(propertyName, texture);
 
             return new { success = true, gameObject = gameObjectName, texture = texturePath };
         }
@@ -89,7 +89,7 @@ namespace UnitySkills
                 return new { error = $"Material not found: {materialPath}" };
 
             Undo.RecordObject(renderer, "Assign Material");
-            renderer.material = material;
+            renderer.sharedMaterial = material;
 
             return new { success = true, gameObject = gameObjectName, material = materialPath };
         }
@@ -106,7 +106,7 @@ namespace UnitySkills
                 return new { error = "No Renderer component found" };
 
             Undo.RecordObject(renderer, "Set Material Float");
-            renderer.material.SetFloat(propertyName, value);
+            renderer.sharedMaterial.SetFloat(propertyName, value);
 
             return new { success = true, gameObject = gameObjectName, property = propertyName, value };
         }

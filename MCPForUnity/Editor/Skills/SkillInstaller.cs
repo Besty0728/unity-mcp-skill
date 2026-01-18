@@ -3,6 +3,9 @@ using UnityEditor;
 using System;
 using System.IO;
 using System.Text;
+using System.Linq;
+using System.Reflection;
+using System.Collections.Generic;
 
 namespace UnitySkills
 {
@@ -101,38 +104,49 @@ namespace UnitySkills
             sb.AppendLine("```");
             sb.AppendLine();
             sb.AppendLine("## Available Skills");
-            sb.AppendLine();
-            sb.AppendLine("### Scene Management");
-            sb.AppendLine("- `scene_create(scenePath)` - Create new scene");
-            sb.AppendLine("- `scene_load(scenePath, additive)` - Load scene");
-            sb.AppendLine("- `scene_save(scenePath)` - Save scene");
-            sb.AppendLine("- `scene_get_info()` - Get scene info");
-            sb.AppendLine();
-            sb.AppendLine("### GameObject Operations");
-            sb.AppendLine("- `gameobject_create(name, primitiveType, x, y, z)` - Create object");
-            sb.AppendLine("- `gameobject_delete(name)` - Delete object");
-            sb.AppendLine("- `gameobject_find(name, tag, component)` - Find objects");
-            sb.AppendLine("- `gameobject_set_transform(...)` - Set transform");
-            sb.AppendLine();
-            sb.AppendLine("### Component Operations");
-            sb.AppendLine("- `component_add(gameObjectName, componentType)` - Add component");
-            sb.AppendLine("- `component_remove(gameObjectName, componentType)` - Remove component");
-            sb.AppendLine("- `component_list(gameObjectName)` - List components");
-            sb.AppendLine();
-            sb.AppendLine("### Material Operations");
-            sb.AppendLine("- `material_create(name, shaderName, savePath)` - Create material");
-            sb.AppendLine("- `material_set_color(gameObjectName, r, g, b, a)` - Set color");
-            sb.AppendLine();
-            sb.AppendLine("### Asset Operations");
-            sb.AppendLine("- `asset_import(sourcePath, destinationPath)` - Import asset");
-            sb.AppendLine("- `asset_delete(assetPath)` - Delete asset");
-            sb.AppendLine("- `asset_find(searchFilter)` - Find assets");
-            sb.AppendLine("- `asset_refresh()` - Refresh database");
-            sb.AppendLine();
-            sb.AppendLine("### Editor Control");
-            sb.AppendLine("- `editor_play()` / `editor_stop()` / `editor_pause()` - Play mode");
-            sb.AppendLine("- `editor_select(gameObjectName)` - Select object");
-            sb.AppendLine("- `editor_undo()` / `editor_redo()` - Undo/Redo");
+            
+            // Dynamic Reflection Logic
+            var skillsByCategory = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<System.Reflection.MethodInfo>>();
+            
+            var allTypes = System.AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic)
+                .SelectMany(a => { try { return a.GetTypes(); } catch { return new System.Type[0]; } });
+
+            foreach (var type in allTypes)
+            {
+                foreach (var method in type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                {
+                    var attr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<UnitySkillAttribute>(method);
+                    if (attr != null)
+                    {
+                        var category = type.Name.Replace("Skills", "");
+                        if (!skillsByCategory.ContainsKey(category))
+                            skillsByCategory[category] = new System.Collections.Generic.List<System.Reflection.MethodInfo>();
+
+                        skillsByCategory[category].Add(method);
+                    }
+                }
+            }
+
+            foreach (var category in skillsByCategory.Keys.OrderBy(k => k))
+            {
+                sb.AppendLine();
+                sb.AppendLine($"### {category}");
+                foreach (var method in skillsByCategory[category])
+                {
+                    var attr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<UnitySkillAttribute>(method);
+                    var skillName = attr.Name ?? method.Name;
+                    var description = attr.Description ?? "";
+                    
+                    var parameters = method.GetParameters()
+                        .Select(p => p.Name)
+                        .ToArray();
+                    var paramStr = string.Join(", ", parameters);
+                    
+                    sb.AppendLine($"- `{skillName}({paramStr})` - {description}");
+                }
+            }
+
             sb.AppendLine();
             sb.AppendLine("## Direct REST API");
             sb.AppendLine();
