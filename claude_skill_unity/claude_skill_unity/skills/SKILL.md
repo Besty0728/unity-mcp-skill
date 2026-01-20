@@ -103,6 +103,23 @@ unity_skills.call_skill("scene_save")
 3. Ensure Unity Editor is running with the plugin active
 4. Start making skill calls!
 
+## TextMeshPro Support
+
+UI Skills 动态检测项目中是否安装了 TextMeshPro：
+
+- **有 TMP**：自动使用 `TextMeshProUGUI` 组件
+- **无 TMP**：自动回退到 Legacy `UnityEngine.UI.Text` 组件
+
+返回值中 `usingTMP` 字段指示使用了哪种文本组件：
+
+```json
+{
+  "success": true,
+  "name": "MyText",
+  "usingTMP": true
+}
+```
+
 ## Configuration
 
 Default server: `http://localhost:8080`

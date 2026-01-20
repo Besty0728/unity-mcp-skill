@@ -2,17 +2,101 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
 using System.Linq;
-#if UNITY_2021_1_OR_NEWER
-using TMPro;
-#endif
+using System.Reflection;
+using System;
 
 namespace UnitySkills
 {
     /// <summary>
     /// UI management skills - create and configure UI elements.
+    /// Dynamically uses TextMeshPro if available, falls back to Legacy UI Text.
     /// </summary>
     public static class UISkills
     {
+        // Cache TMP types for performance
+        private static Type _tmpTextType;
+        private static Type _tmpInputFieldType;
+        private static bool _tmpChecked = false;
+        private static bool _tmpAvailable = false;
+
+        /// <summary>
+        /// Check if TextMeshPro is available in the project
+        /// </summary>
+        private static bool IsTMPAvailable()
+        {
+            if (!_tmpChecked)
+            {
+                _tmpChecked = true;
+                _tmpTextType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+                _tmpInputFieldType = Type.GetType("TMPro.TMP_InputField, Unity.TextMeshPro");
+                _tmpAvailable = _tmpTextType != null;
+            }
+            return _tmpAvailable;
+        }
+
+        /// <summary>
+        /// Add text component - uses TMP if available, otherwise Legacy Text
+        /// </summary>
+        private static Component AddTextComponent(GameObject go, string text, int fontSize, Color color, TextAnchor alignment = TextAnchor.MiddleLeft)
+        {
+            if (IsTMPAvailable())
+            {
+                var tmp = go.AddComponent(_tmpTextType);
+                // Set properties via reflection
+                _tmpTextType.GetProperty("text")?.SetValue(tmp, text);
+                _tmpTextType.GetProperty("fontSize")?.SetValue(tmp, (float)fontSize);
+                _tmpTextType.GetProperty("color")?.SetValue(tmp, color);
+                
+                // Convert TextAnchor to TMP alignment
+                var alignmentOptionsType = Type.GetType("TMPro.TextAlignmentOptions, Unity.TextMeshPro");
+                if (alignmentOptionsType != null)
+                {
+                    object tmpAlignment = alignment switch
+                    {
+                        TextAnchor.UpperLeft => Enum.Parse(alignmentOptionsType, "TopLeft"),
+                        TextAnchor.UpperCenter => Enum.Parse(alignmentOptionsType, "Top"),
+                        TextAnchor.UpperRight => Enum.Parse(alignmentOptionsType, "TopRight"),
+                        TextAnchor.MiddleLeft => Enum.Parse(alignmentOptionsType, "Left"),
+                        TextAnchor.MiddleCenter => Enum.Parse(alignmentOptionsType, "Center"),
+                        TextAnchor.MiddleRight => Enum.Parse(alignmentOptionsType, "Right"),
+                        TextAnchor.LowerLeft => Enum.Parse(alignmentOptionsType, "BottomLeft"),
+                        TextAnchor.LowerCenter => Enum.Parse(alignmentOptionsType, "Bottom"),
+                        TextAnchor.LowerRight => Enum.Parse(alignmentOptionsType, "BottomRight"),
+                        _ => Enum.Parse(alignmentOptionsType, "Center")
+                    };
+                    _tmpTextType.GetProperty("alignment")?.SetValue(tmp, tmpAlignment);
+                }
+                return tmp;
+            }
+            else
+            {
+                var textComp = go.AddComponent<Text>();
+                textComp.text = text;
+                textComp.fontSize = fontSize;
+                textComp.color = color;
+                textComp.alignment = alignment;
+                textComp.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (textComp.font == null)
+                    textComp.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                return textComp;
+            }
+        }
+
+        /// <summary>
+        /// Set text on a component (TMP or Legacy)
+        /// </summary>
+        private static bool SetTextOnComponent(Component comp, string text)
+        {
+            if (comp == null) return false;
+            
+            var textProp = comp.GetType().GetProperty("text");
+            if (textProp != null)
+            {
+                textProp.SetValue(comp, text);
+                return true;
+            }
+            return false;
+        }
         [UnitySkill("ui_create_canvas", "Create a new Canvas")]
         public static object UICreateCanvas(string name = "Canvas", string renderMode = "ScreenSpaceOverlay")
         {
@@ -97,17 +181,7 @@ namespace UnitySkills
             textRect.anchorMax = Vector2.one;
             textRect.sizeDelta = Vector2.zero;
 
-#if UNITY_2021_1_OR_NEWER
-            var tmp = textGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = text;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = Color.black;
-#else
-            var textComp = textGo.AddComponent<Text>();
-            textComp.text = text;
-            textComp.alignment = TextAnchor.MiddleCenter;
-            textComp.color = Color.black;
-#endif
+            AddTextComponent(textGo, text, 14, Color.black, TextAnchor.MiddleCenter);
 
             Undo.RegisterCreatedObjectUndo(go, "Create Button");
 
@@ -127,21 +201,11 @@ namespace UnitySkills
             var rectTransform = go.AddComponent<RectTransform>();
             rectTransform.sizeDelta = new Vector2(200, 50);
 
-#if UNITY_2021_1_OR_NEWER
-            var tmp = go.AddComponent<TextMeshProUGUI>();
-            tmp.text = text;
-            tmp.fontSize = fontSize;
-            tmp.color = new Color(r, g, b);
-#else
-            var textComp = go.AddComponent<Text>();
-            textComp.text = text;
-            textComp.fontSize = fontSize;
-            textComp.color = new Color(r, g, b);
-#endif
+            AddTextComponent(go, text, fontSize, new Color(r, g, b));
 
             Undo.RegisterCreatedObjectUndo(go, "Create Text");
 
-            return new { success = true, name = go.name, instanceId = go.GetInstanceID(), parent = parentGo.name };
+            return new { success = true, name = go.name, instanceId = go.GetInstanceID(), parent = parentGo.name, usingTMP = IsTMPAvailable() };
         }
 
         [UnitySkill("ui_create_image", "Create an Image UI element")]
@@ -187,76 +251,91 @@ namespace UnitySkills
             var image = go.AddComponent<Image>();
             image.color = Color.white;
 
-#if UNITY_2021_1_OR_NEWER
-            var inputField = go.AddComponent<TMP_InputField>();
+            if (IsTMPAvailable())
+            {
+                // Use TMP InputField
+                var inputField = go.AddComponent(_tmpInputFieldType);
 
-            // Create text area
-            var textAreaGo = new GameObject("Text Area");
-            textAreaGo.transform.SetParent(go.transform, false);
-            var textAreaRect = textAreaGo.AddComponent<RectTransform>();
-            textAreaRect.anchorMin = Vector2.zero;
-            textAreaRect.anchorMax = Vector2.one;
-            textAreaRect.sizeDelta = new Vector2(-20, 0);
-            textAreaGo.AddComponent<RectMask2D>();
+                // Create text area
+                var textAreaGo = new GameObject("Text Area");
+                textAreaGo.transform.SetParent(go.transform, false);
+                var textAreaRect = textAreaGo.AddComponent<RectTransform>();
+                textAreaRect.anchorMin = Vector2.zero;
+                textAreaRect.anchorMax = Vector2.one;
+                textAreaRect.offsetMin = new Vector2(10, 6);
+                textAreaRect.offsetMax = new Vector2(-10, -7);
+                textAreaGo.AddComponent<RectMask2D>();
 
-            // Placeholder
-            var placeholderGo = new GameObject("Placeholder");
-            placeholderGo.transform.SetParent(textAreaGo.transform, false);
-            var placeholderRect = placeholderGo.AddComponent<RectTransform>();
-            placeholderRect.anchorMin = Vector2.zero;
-            placeholderRect.anchorMax = Vector2.one;
-            placeholderRect.sizeDelta = Vector2.zero;
-            var placeholderText = placeholderGo.AddComponent<TextMeshProUGUI>();
-            placeholderText.text = placeholder;
-            placeholderText.color = new Color(0.5f, 0.5f, 0.5f);
-            placeholderText.fontStyle = FontStyles.Italic;
+                // Placeholder
+                var placeholderGo = new GameObject("Placeholder");
+                placeholderGo.transform.SetParent(textAreaGo.transform, false);
+                var placeholderRect = placeholderGo.AddComponent<RectTransform>();
+                placeholderRect.anchorMin = Vector2.zero;
+                placeholderRect.anchorMax = Vector2.one;
+                placeholderRect.sizeDelta = Vector2.zero;
+                var placeholderComp = AddTextComponent(placeholderGo, placeholder, 14, new Color(0.5f, 0.5f, 0.5f));
+                // Set italic style
+                var fontStyleType = Type.GetType("TMPro.FontStyles, Unity.TextMeshPro");
+                if (fontStyleType != null)
+                    _tmpTextType.GetProperty("fontStyle")?.SetValue(placeholderComp, Enum.Parse(fontStyleType, "Italic"));
 
-            // Text
-            var textGo = new GameObject("Text");
-            textGo.transform.SetParent(textAreaGo.transform, false);
-            var textRect = textGo.AddComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.sizeDelta = Vector2.zero;
-            var text = textGo.AddComponent<TextMeshProUGUI>();
-            text.color = Color.black;
+                // Text
+                var textGo = new GameObject("Text");
+                textGo.transform.SetParent(textAreaGo.transform, false);
+                var textRect = textGo.AddComponent<RectTransform>();
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.sizeDelta = Vector2.zero;
+                var textComp = AddTextComponent(textGo, "", 14, Color.black);
 
-            inputField.textViewport = textAreaRect;
-            inputField.textComponent = text;
-            inputField.placeholder = placeholderText;
-#else
-            var inputField = go.AddComponent<InputField>();
+                // Set TMP_InputField properties
+                _tmpInputFieldType.GetProperty("textViewport")?.SetValue(inputField, textAreaRect);
+                _tmpInputFieldType.GetProperty("textComponent")?.SetValue(inputField, textComp);
+                _tmpInputFieldType.GetProperty("placeholder")?.SetValue(inputField, placeholderComp);
+            }
+            else
+            {
+                // Use Legacy InputField
+                var inputField = go.AddComponent<InputField>();
 
-            // Placeholder
-            var placeholderGo = new GameObject("Placeholder");
-            placeholderGo.transform.SetParent(go.transform, false);
-            var placeholderRect = placeholderGo.AddComponent<RectTransform>();
-            placeholderRect.anchorMin = Vector2.zero;
-            placeholderRect.anchorMax = Vector2.one;
-            placeholderRect.sizeDelta = Vector2.zero;
-            var placeholderText = placeholderGo.AddComponent<Text>();
-            placeholderText.text = placeholder;
-            placeholderText.color = new Color(0.5f, 0.5f, 0.5f);
-            placeholderText.fontStyle = FontStyle.Italic;
+                // Placeholder
+                var placeholderGo = new GameObject("Placeholder");
+                placeholderGo.transform.SetParent(go.transform, false);
+                var placeholderRect = placeholderGo.AddComponent<RectTransform>();
+                placeholderRect.anchorMin = Vector2.zero;
+                placeholderRect.anchorMax = Vector2.one;
+                placeholderRect.offsetMin = new Vector2(10, 6);
+                placeholderRect.offsetMax = new Vector2(-10, -7);
+                var placeholderText = placeholderGo.AddComponent<Text>();
+                placeholderText.text = placeholder;
+                placeholderText.color = new Color(0.5f, 0.5f, 0.5f);
+                placeholderText.fontStyle = FontStyle.Italic;
+                placeholderText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (placeholderText.font == null)
+                    placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-            // Text
-            var textGo = new GameObject("Text");
-            textGo.transform.SetParent(go.transform, false);
-            var textRect = textGo.AddComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.sizeDelta = Vector2.zero;
-            var text = textGo.AddComponent<Text>();
-            text.color = Color.black;
-            text.supportRichText = false;
+                // Text
+                var textGo = new GameObject("Text");
+                textGo.transform.SetParent(go.transform, false);
+                var textRect = textGo.AddComponent<RectTransform>();
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.offsetMin = new Vector2(10, 6);
+                textRect.offsetMax = new Vector2(-10, -7);
+                var text = textGo.AddComponent<Text>();
+                text.color = Color.black;
+                text.supportRichText = false;
+                text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (text.font == null)
+                    text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-            inputField.textComponent = text;
-            inputField.placeholder = placeholderText;
-#endif
+                inputField.textComponent = text;
+                inputField.placeholder = placeholderText;
+            }
 
             Undo.RegisterCreatedObjectUndo(go, "Create InputField");
 
-            return new { success = true, name = go.name, instanceId = go.GetInstanceID(), parent = parentGo.name, placeholder };
+            return new { success = true, name = go.name, instanceId = go.GetInstanceID(), parent = parentGo.name, placeholder, usingTMP = IsTMPAvailable() };
         }
 
         [UnitySkill("ui_create_slider", "Create a Slider UI element")]
@@ -376,15 +455,7 @@ namespace UnitySkills
             labelRect.offsetMin = new Vector2(25, 0);
             labelRect.offsetMax = Vector2.zero;
 
-#if UNITY_2021_1_OR_NEWER
-            var labelText = labelGo.AddComponent<TextMeshProUGUI>();
-            labelText.text = label;
-            labelText.color = Color.black;
-#else
-            var labelText = labelGo.AddComponent<Text>();
-            labelText.text = label;
-            labelText.color = Color.black;
-#endif
+            AddTextComponent(labelGo, label, 14, Color.black);
 
             Undo.RegisterCreatedObjectUndo(go, "Create Toggle");
 
@@ -397,25 +468,28 @@ namespace UnitySkills
             var (go, error) = GameObjectFinder.FindOrError(name, instanceId, path);
             if (error != null) return error;
 
-#if UNITY_2021_1_OR_NEWER
-            var tmp = go.GetComponent<TextMeshProUGUI>();
-            if (tmp != null)
+            // Try TMP first if available
+            if (IsTMPAvailable())
             {
-                Undo.RecordObject(tmp, "Set Text");
-                tmp.text = text;
-                return new { success = true, name = go.name, text };
+                var tmpComp = go.GetComponent(_tmpTextType);
+                if (tmpComp != null)
+                {
+                    Undo.RecordObject(tmpComp, "Set Text");
+                    SetTextOnComponent(tmpComp, text);
+                    return new { success = true, name = go.name, text, usingTMP = true };
+                }
             }
-#endif
 
+            // Fallback to Legacy Text
             var textComp = go.GetComponent<Text>();
             if (textComp != null)
             {
                 Undo.RecordObject(textComp, "Set Text");
                 textComp.text = text;
-                return new { success = true, name = go.name, text };
+                return new { success = true, name = go.name, text, usingTMP = false };
             }
 
-            return new { error = "No Text component found" };
+            return new { error = "No Text component found (checked both TMP and Legacy UI)" };
         }
 
         [UnitySkill("ui_find_all", "Find all UI elements in the scene")]
@@ -479,10 +553,14 @@ namespace UnitySkills
             if (go.GetComponent<Button>()) return "Button";
             if (go.GetComponent<Slider>()) return "Slider";
             if (go.GetComponent<Toggle>()) return "Toggle";
-#if UNITY_2021_1_OR_NEWER
-            if (go.GetComponent<TMP_InputField>()) return "InputField";
-            if (go.GetComponent<TextMeshProUGUI>()) return "Text";
-#endif
+            
+            // Check TMP types first if available
+            if (IsTMPAvailable())
+            {
+                if (_tmpInputFieldType != null && go.GetComponent(_tmpInputFieldType) != null) return "InputField";
+                if (_tmpTextType != null && go.GetComponent(_tmpTextType) != null) return "Text";
+            }
+            
             if (go.GetComponent<InputField>()) return "InputField";
             if (go.GetComponent<Text>()) return "Text";
             if (go.GetComponent<Image>()) return "Image";

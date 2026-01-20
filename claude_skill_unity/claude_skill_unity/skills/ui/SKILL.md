@@ -225,10 +225,22 @@ buttons = unity_skills.call_skill("ui_find_all",
     "name": "StartButton",
     "instanceId": 12345,
     "parent": "MenuPanel",
-    "text": "Start Game"
+    "text": "Start Game",
+    "usingTMP": true
   }
 }
 ```
+
+## TextMeshPro Support
+
+UI Skills 动态检测 TextMeshPro 是否已安装：
+
+| 项目配置 | 文本组件 |
+|---------|---------|
+| 有 TMP 包 | `TextMeshProUGUI` |
+| 无 TMP 包 | Legacy `UnityEngine.UI.Text` |
+
+返回值中的 `usingTMP` 字段指示使用了哪种组件。
 
 ## Best Practices
 
@@ -236,5 +248,5 @@ buttons = unity_skills.call_skill("ui_find_all",
 2. Use Panels to organize related elements
 3. Use meaningful names for scripting access
 4. Set parent for proper hierarchy
-5. Unity 2021.1+ uses TextMeshPro automatically
+5. Text components auto-detect TMP availability
 6. WorldSpace canvas for 3D UI (health bars, etc.)
