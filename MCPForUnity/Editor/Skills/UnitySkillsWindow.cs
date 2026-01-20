@@ -365,13 +365,80 @@ namespace UnitySkills
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
 
+            EditorGUILayout.Space(10);
+
+            // Gemini CLI
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Gemini CLI", EditorStyles.boldLabel);
+            
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(L("install_project") + ":", GUILayout.Width(100));
+            if (SkillInstaller.IsGeminiProjectInstalled)
+            {
+                EditorGUILayout.LabelField(L("installed"), EditorStyles.miniLabel, GUILayout.Width(80));
+                if (GUILayout.Button(L("uninstall"), GUILayout.Width(60)))
+                {
+                    if (EditorUtility.DisplayDialog(L("uninstall"), string.Format(L("uninstall_confirm"), "Gemini CLI (Project)"), "OK", "Cancel"))
+                    {
+                        var result = SkillInstaller.UninstallGemini(false);
+                        if (result.success)
+                            EditorUtility.DisplayDialog("Success", L("uninstall_success"), "OK");
+                        else
+                            EditorUtility.DisplayDialog("Error", string.Format(L("uninstall_failed"), result.message), "OK");
+                    }
+                }
+            }
+            else
+            {
+                if (GUILayout.Button(L("install_project"), GUILayout.Width(120)))
+                {
+                    var result = SkillInstaller.InstallGemini(false);
+                    if (result.success)
+                        EditorUtility.DisplayDialog("Success", L("install_success") + "\n" + result.message, "OK");
+                    else
+                        EditorUtility.DisplayDialog("Error", string.Format(L("install_failed"), result.message), "OK");
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(L("install_global") + ":", GUILayout.Width(100));
+            if (SkillInstaller.IsGeminiGlobalInstalled)
+            {
+                EditorGUILayout.LabelField(L("installed"), EditorStyles.miniLabel, GUILayout.Width(80));
+                if (GUILayout.Button(L("uninstall"), GUILayout.Width(60)))
+                {
+                    if (EditorUtility.DisplayDialog(L("uninstall"), string.Format(L("uninstall_confirm"), "Gemini CLI (Global)"), "OK", "Cancel"))
+                    {
+                        var result = SkillInstaller.UninstallGemini(true);
+                        if (result.success)
+                            EditorUtility.DisplayDialog("Success", L("uninstall_success"), "OK");
+                        else
+                            EditorUtility.DisplayDialog("Error", string.Format(L("uninstall_failed"), result.message), "OK");
+                    }
+                }
+            }
+            else
+            {
+                if (GUILayout.Button(L("install_global"), GUILayout.Width(120)))
+                {
+                    var result = SkillInstaller.InstallGemini(true);
+                    if (result.success)
+                        EditorUtility.DisplayDialog("Success", L("install_success") + "\n" + result.message + L("gemini_enable_hint"), "OK");
+                    else
+                        EditorUtility.DisplayDialog("Error", string.Format(L("install_failed"), result.message), "OK");
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndVertical();
+
             EditorGUILayout.Space(20);
             
             // Help text
             EditorGUILayout.HelpBox(
                 Localization.Current == Localization.Language.Chinese
-                    ? "项目安装：将 Skill 安装到当前 Unity 项目目录\n全局安装：将 Skill 安装到用户目录，所有项目可用"
-                    : "Project Install: Install skill to current Unity project\nGlobal Install: Install skill to user folder, available for all projects",
+                    ? "项目安装：将 Skill 安装到当前 Unity 项目目录\n全局安装：将 Skill 安装到用户目录，所有项目可用\n\n注意：Gemini CLI 需要在 /settings 中启用 experimental.skills"
+                    : "Project Install: Install skill to current Unity project\nGlobal Install: Install skill to user folder, available for all projects\n\nNote: Gemini CLI requires enabling experimental.skills in /settings",
                 MessageType.Info
             );
         }

@@ -10,7 +10,7 @@ using System.Collections.Generic;
 namespace UnitySkills
 {
     /// <summary>
-    /// One-click skill installer for Claude Code and Antigravity.
+    /// One-click skill installer for Claude Code, Antigravity, and Gemini CLI.
     /// </summary>
     public static class SkillInstaller
     {
@@ -22,10 +22,16 @@ namespace UnitySkills
         public static string AntigravityProjectPath => Path.Combine(Application.dataPath, "..", ".agent", "skills", "unity-skills");
         public static string AntigravityGlobalPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini", "antigravity", "skills", "unity-skills");
 
+        // Gemini CLI paths
+        public static string GeminiProjectPath => Path.Combine(Application.dataPath, "..", ".gemini", "skills", "unity-skills");
+        public static string GeminiGlobalPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini", "skills", "unity-skills");
+
         public static bool IsClaudeProjectInstalled => Directory.Exists(ClaudeProjectPath) && File.Exists(Path.Combine(ClaudeProjectPath, "SKILL.md"));
         public static bool IsClaudeGlobalInstalled => Directory.Exists(ClaudeGlobalPath) && File.Exists(Path.Combine(ClaudeGlobalPath, "SKILL.md"));
         public static bool IsAntigravityProjectInstalled => Directory.Exists(AntigravityProjectPath) && File.Exists(Path.Combine(AntigravityProjectPath, "SKILL.md"));
         public static bool IsAntigravityGlobalInstalled => Directory.Exists(AntigravityGlobalPath) && File.Exists(Path.Combine(AntigravityGlobalPath, "SKILL.md"));
+        public static bool IsGeminiProjectInstalled => Directory.Exists(GeminiProjectPath) && File.Exists(Path.Combine(GeminiProjectPath, "SKILL.md"));
+        public static bool IsGeminiGlobalInstalled => Directory.Exists(GeminiGlobalPath) && File.Exists(Path.Combine(GeminiGlobalPath, "SKILL.md"));
 
         public static (bool success, string message) InstallClaude(bool global)
         {
@@ -72,6 +78,32 @@ namespace UnitySkills
             {
                 var targetPath = global ? AntigravityGlobalPath : AntigravityProjectPath;
                 return UninstallSkill(targetPath, "Antigravity");
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static (bool success, string message) InstallGemini(bool global)
+        {
+            try
+            {
+                var targetPath = global ? GeminiGlobalPath : GeminiProjectPath;
+                return InstallSkill(targetPath, "Gemini CLI");
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static (bool success, string message) UninstallGemini(bool global)
+        {
+            try
+            {
+                var targetPath = global ? GeminiGlobalPath : GeminiProjectPath;
+                return UninstallSkill(targetPath, "Gemini CLI");
             }
             catch (Exception ex)
             {

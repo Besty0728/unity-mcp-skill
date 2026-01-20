@@ -49,6 +49,7 @@ namespace UnitySkills
             {"skill_config", "AI Skill Configuration"},
             {"claude_code", "Claude Code"},
             {"antigravity", "Antigravity"},
+            {"gemini_cli", "Gemini CLI"},
             {"install_project", "Install to Project"},
             {"install_global", "Install Global"},
             {"installed", "✓ Installed"},
@@ -59,6 +60,7 @@ namespace UnitySkills
             {"uninstall_success", "Skill uninstalled successfully!"},
             {"uninstall_failed", "Uninstall failed: {0}"},
             {"uninstall_confirm", "Are you sure you want to uninstall {0}?"},
+            {"gemini_enable_hint", "\n\nNote: Enable experimental.skills in Gemini CLI /settings"},
             
             // Skill descriptions
             {"scene_create", "Create a new empty scene"},
@@ -156,6 +158,7 @@ namespace UnitySkills
             {"skill_config", "AI Skill 配置"},
             {"claude_code", "Claude Code"},
             {"antigravity", "Antigravity"},
+            {"gemini_cli", "Gemini CLI"},
             {"install_project", "安装到项目"},
             {"install_global", "全局安装"},
             {"installed", "✓ 已安装"},
@@ -166,6 +169,7 @@ namespace UnitySkills
             {"uninstall_success", "Skill 卸载成功！"},
             {"uninstall_failed", "卸载失败：{0}"},
             {"uninstall_confirm", "确定要卸载 {0} 吗？"},
+            {"gemini_enable_hint", "\n\n注意：请在 Gemini CLI 的 /settings 中启用 experimental.skills"},
             
             // Skill descriptions
             {"scene_create", "创建新的空场景"},

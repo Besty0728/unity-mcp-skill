@@ -1,10 +1,10 @@
 # UnitySkills 完整使用指南
 
-REST API 直接控制 Unity Editor，彻底告别 MCP！
+REST API 直接控制 Unity Editor，让 AI 生成极简脚本完成场景操作！
 
 ---
 
-## 一、安装
+## 一、安装 Unity 插件
 
 ### 方式 A：Git URL（推荐）
 ```
@@ -36,7 +36,39 @@ curl http://localhost:8090/skills
 
 ---
 
-## 四、调用 Skills
+## 四、AI 工具配置
+
+UnitySkills 支持多种 AI 工具，可以通过 Unity 编辑器一键安装。
+
+### 打开配置窗口
+Unity 菜单：**Window → UnitySkills**，切换到 **AI Config** 标签页
+
+### 支持的 AI 工具
+
+| AI 工具 | 项目安装路径 | 全局安装路径 |
+|---------|------------|------------|
+| Claude Code | `.claude/skills/unity-skills/` | `~/.claude/skills/unity-skills/` |
+| Antigravity | `.agent/skills/unity-skills/` | `~/.gemini/antigravity/skills/unity-skills/` |
+| Gemini CLI | `.gemini/skills/unity-skills/` | `~/.gemini/skills/unity-skills/` |
+
+### 一键安装
+1. 在 UnitySkills 窗口的 AI Config 标签页
+2. 选择要安装的 AI 工具
+3. 点击 "安装到项目" 或 "全局安装"
+4. 安装成功后会显示 "✓ 已安装"
+
+### Gemini CLI 特别说明
+Gemini CLI 的 Skills 功能是实验性的，需要手动启用：
+```bash
+gemini
+# 进入交互模式后输入
+/settings
+# 搜索 "Skills" 并启用 experimental.skills
+```
+
+---
+
+## 五、调用 Skills
 
 ### 基本格式
 ```bash
