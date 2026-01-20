@@ -65,6 +65,12 @@ namespace UnitySkills
             {"uninstall_confirm", "Are you sure you want to uninstall {0}?"},
             {"gemini_enable_hint", "\n\nNote: Enable experimental.skills in Gemini CLI /settings"},
             
+            // Server stats
+            {"server_stats", "Live Statistics"},
+            {"queued_requests", "Queued Requests"},
+            {"total_processed", "Total Processed"},
+            {"architecture", "Architecture"},
+            
             // Skill descriptions
             {"scene_create", "Create a new empty scene"},
             {"scene_load", "Load an existing scene"},
@@ -176,6 +182,12 @@ namespace UnitySkills
             {"uninstall_failed", "卸载失败：{0}"},
             {"uninstall_confirm", "确定要卸载 {0} 吗？"},
             {"gemini_enable_hint", "\n\n注意：请在 Gemini CLI 的 /settings 中启用 experimental.skills"},
+            
+            // Server stats
+            {"server_stats", "实时统计"},
+            {"queued_requests", "队列中请求"},
+            {"total_processed", "已处理总数"},
+            {"architecture", "架构"},
             
             // Skill descriptions
             {"scene_create", "创建新的空场景"},

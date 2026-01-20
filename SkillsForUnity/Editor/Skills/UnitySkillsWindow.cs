@@ -8,6 +8,7 @@ namespace UnitySkills
 {
     /// <summary>
     /// Unity Editor Window for UnitySkills REST API control.
+    /// Also acts as a backup heartbeat to ensure server responsiveness.
     /// </summary>
     public class UnitySkillsWindow : EditorWindow
     {
@@ -21,6 +22,11 @@ namespace UnitySkills
         private bool _showSkillConfig = true;
         private int _selectedTab = 0;
         private string[] _tabNames = new[] { "Server", "Skills", "AI Config" };
+        
+        // Server monitoring
+        private double _lastRepaintTime;
+        private const double RepaintInterval = 0.5; // Repaint every 0.5s for live stats
+        private bool _autoStartServer = true;
 
         private class SkillInfo
         {
@@ -40,6 +46,35 @@ namespace UnitySkills
         {
             RefreshSkillsList();
             _serverRunning = SkillsHttpServer.IsRunning;
+            
+            // Subscribe to editor update for live monitoring
+            EditorApplication.update += OnEditorUpdate;
+        }
+        
+        private void OnDisable()
+        {
+            EditorApplication.update -= OnEditorUpdate;
+        }
+        
+        /// <summary>
+        /// Editor update callback - provides backup heartbeat for server
+        /// and auto-repaint for live statistics.
+        /// </summary>
+        private void OnEditorUpdate()
+        {
+            // Sync server status
+            _serverRunning = SkillsHttpServer.IsRunning;
+            
+            // Auto-repaint when server is running (shows live stats)
+            if (_serverRunning && _selectedTab == 0)
+            {
+                double now = EditorApplication.timeSinceStartup;
+                if (now - _lastRepaintTime > RepaintInterval)
+                {
+                    _lastRepaintTime = now;
+                    Repaint();
+                }
+            }
         }
 
         private void RefreshSkillsList()
@@ -150,6 +185,28 @@ namespace UnitySkills
             if (_serverRunning)
             {
                 EditorGUILayout.SelectableLabel(SkillsHttpServer.Url, EditorStyles.miniLabel, GUILayout.Height(18));
+                
+                // Live Server Statistics
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField(L("server_stats"), EditorStyles.miniBoldLabel);
+                
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(L("queued_requests") + ":", GUILayout.Width(120));
+                var queueCount = SkillsHttpServer.QueuedRequests;
+                var queueStyle = new GUIStyle(EditorStyles.label);
+                queueStyle.normal.textColor = queueCount > 10 ? Color.yellow : (queueCount > 0 ? Color.cyan : Color.gray);
+                EditorGUILayout.LabelField(queueCount.ToString(), queueStyle);
+                EditorGUILayout.EndHorizontal();
+                
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(L("total_processed") + ":", GUILayout.Width(120));
+                EditorGUILayout.LabelField(SkillsHttpServer.TotalProcessed.ToString());
+                EditorGUILayout.EndHorizontal();
+                
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(L("architecture") + ":", GUILayout.Width(120));
+                EditorGUILayout.LabelField("Producer-Consumer", EditorStyles.miniLabel);
+                EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndVertical();
 

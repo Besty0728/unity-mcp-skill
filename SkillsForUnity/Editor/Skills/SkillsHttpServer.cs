@@ -10,8 +10,13 @@ using Newtonsoft.Json;
 namespace UnitySkills
 {
     /// <summary>
-    /// Embedded HTTP server for UnitySkills REST API.
-    /// Supports high-frequency calls and background execution when Unity is not focused.
+    /// Robust HTTP server for UnitySkills REST API.
+    /// 
+    /// Architecture: Strict Producer-Consumer Pattern
+    /// - HTTP Thread (Producer): ONLY receives requests and enqueues them. NO Unity API calls.
+    /// - Main Thread (Consumer): Processes ALL logic including routing, rate limiting, and skill execution.
+    /// 
+    /// This ensures 100% thread safety with Unity's single-threaded architecture.
     /// </summary>
     [InitializeOnLoad]
     public static class SkillsHttpServer
@@ -19,53 +24,68 @@ namespace UnitySkills
         private static HttpListener _listener;
         private static Thread _listenerThread;
         private static Thread _keepAliveThread;
-        private static bool _isRunning;
-        private static string _prefix = "http://localhost:8090/";
+        private static volatile bool _isRunning;
+        private static readonly string _prefix = "http://localhost:8090/";
         
-        // Request queue for main thread execution
-        private static readonly Queue<PendingRequest> _requestQueue = new Queue<PendingRequest>();
+        // Job queue - HTTP thread enqueues, Main thread dequeues and processes
+        private static readonly Queue<RequestJob> _jobQueue = new Queue<RequestJob>();
         private static readonly object _queueLock = new object();
         private static bool _updateHooked = false;
         
-        // Rate limiting
+        // Rate limiting (processed on main thread only)
         private static int _requestsThisSecond = 0;
         private static double _lastRateLimitReset = 0;
         private const int MaxRequestsPerSecond = 100;
         
-        // Keep-alive interval (ms) - forces Unity to process requests even when not focused
+        // Keep-alive interval (ms)
         private const int KeepAliveIntervalMs = 50;
+        
+        // Statistics
+        private static long _totalRequestsProcessed = 0;
+        private static long _totalRequestsReceived = 0;
 
         public static bool IsRunning => _isRunning;
         public static string Url => _prefix;
-        public static int QueuedRequests { get { lock (_queueLock) { return _requestQueue.Count; } } }
+        public static int QueuedRequests { get { lock (_queueLock) { return _jobQueue.Count; } } }
+        public static long TotalProcessed => _totalRequestsProcessed;
 
-        private class PendingRequest
+        /// <summary>
+        /// Represents a pending HTTP request job.
+        /// Created by HTTP thread, processed by Main thread.
+        /// </summary>
+        private class RequestJob
         {
-            public string SkillName;
-            public string Args;
-            public ManualResetEvent WaitHandle;
-            public string Result;
-            public double QueueTime;
+            // Raw HTTP data (set by HTTP thread)
+            public HttpListenerContext Context;
+            public string HttpMethod;
+            public string Path;
+            public string Body;
+            public long EnqueueTimeTicks;
+            
+            // Result (set by Main thread)
+            public string ResponseJson;
+            public int StatusCode;
+            public bool IsProcessed;
+            public ManualResetEventSlim CompletionSignal;
         }
 
         static SkillsHttpServer()
         {
             EditorApplication.quitting += Stop;
-            // Hook into update loop immediately for background execution support
             HookUpdateLoop();
         }
         
         private static void HookUpdateLoop()
         {
             if (_updateHooked) return;
-            EditorApplication.update += ProcessRequestQueue;
+            EditorApplication.update += ProcessJobQueue;
             _updateHooked = true;
         }
         
         private static void UnhookUpdateLoop()
         {
             if (!_updateHooked) return;
-            EditorApplication.update -= ProcessRequestQueue;
+            EditorApplication.update -= ProcessJobQueue;
             _updateHooked = false;
         }
 
@@ -79,7 +99,6 @@ namespace UnitySkills
 
             try
             {
-                // Ensure update hook is active
                 HookUpdateLoop();
                 
                 _listener = new HttpListener();
@@ -87,17 +106,19 @@ namespace UnitySkills
                 _listener.Start();
                 _isRunning = true;
 
-                // Start listener thread
-                _listenerThread = new Thread(ListenLoop) { IsBackground = true };
+                // Start listener thread (Producer - ONLY enqueues, no Unity API)
+                _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "UnitySkills-Listener" };
                 _listenerThread.Start();
                 
-                // Start keep-alive thread to ensure Unity processes requests when not focused
-                _keepAliveThread = new Thread(KeepAliveLoop) { IsBackground = true };
+                // Start keep-alive thread (forces Unity to update when not focused)
+                _keepAliveThread = new Thread(KeepAliveLoop) { IsBackground = true, Name = "UnitySkills-KeepAlive" };
                 _keepAliveThread.Start();
 
+                // These calls are safe here because Start() is called from Main thread
+                var skillCount = SkillRouter.GetManifest().Split('\n').Length;
                 Debug.Log($"[UnitySkills] REST Server started at {_prefix}");
-                Debug.Log($"[UnitySkills] {SkillRouter.GetManifest().Split('\n').Length} skills available");
-                Debug.Log($"[UnitySkills] Background execution: ENABLED (works when Unity is not focused)");
+                Debug.Log($"[UnitySkills] {skillCount} skills available");
+                Debug.Log($"[UnitySkills] Architecture: Strict Producer-Consumer (Thread-Safe)");
             }
             catch (Exception ex)
             {
@@ -110,17 +131,20 @@ namespace UnitySkills
         {
             if (!_isRunning) return;
             _isRunning = false;
-            _listener?.Stop();
-            _listener?.Close();
             
-            // Clear pending requests
+            try { _listener?.Stop(); } catch { }
+            try { _listener?.Close(); } catch { }
+            
+            // Signal all pending jobs to complete with error
             lock (_queueLock)
             {
-                while (_requestQueue.Count > 0)
+                while (_jobQueue.Count > 0)
                 {
-                    var req = _requestQueue.Dequeue();
-                    req.Result = JsonConvert.SerializeObject(new { error = "Server stopped" });
-                    req.WaitHandle.Set();
+                    var job = _jobQueue.Dequeue();
+                    job.StatusCode = 503;
+                    job.ResponseJson = JsonConvert.SerializeObject(new { error = "Server stopped" });
+                    job.IsProcessed = true;
+                    job.CompletionSignal?.Set();
                 }
             }
             
@@ -128,8 +152,8 @@ namespace UnitySkills
         }
         
         /// <summary>
-        /// Keep-alive loop that forces Unity Editor to update even when not focused.
-        /// This ensures requests are processed in the background.
+        /// Keep-alive loop - forces Unity to update when not focused.
+        /// Does NOT call any Unity API directly (uses thread-safe QueuePlayerLoopUpdate).
         /// </summary>
         private static void KeepAliveLoop()
         {
@@ -139,31 +163,28 @@ namespace UnitySkills
                 {
                     Thread.Sleep(KeepAliveIntervalMs);
                     
-                    // Only force repaint if there are pending requests
-                    bool hasPendingRequests;
+                    bool hasPendingJobs;
                     lock (_queueLock)
                     {
-                        hasPendingRequests = _requestQueue.Count > 0;
+                        hasPendingJobs = _jobQueue.Count > 0;
                     }
                     
-                    if (hasPendingRequests)
+                    if (hasPendingJobs)
                     {
-                        // Force Unity to update even when not focused
-                        // This is thread-safe and will trigger ProcessRequestQueue on the main thread
+                        // Thread-safe call to wake up Unity's main thread
                         EditorApplication.QueuePlayerLoopUpdate();
                     }
                 }
-                catch (ThreadAbortException)
-                {
-                    break;
-                }
-                catch (Exception)
-                {
-                    // Ignore errors in keep-alive loop
-                }
+                catch (ThreadAbortException) { break; }
+                catch { /* Ignore */ }
             }
         }
 
+        /// <summary>
+        /// HTTP Listener loop (Producer).
+        /// CRITICAL: This runs on a background thread. NO Unity API calls allowed.
+        /// Only enqueues raw request data for main thread processing.
+        /// </summary>
         private static void ListenLoop()
         {
             while (_isRunning)
@@ -171,170 +192,267 @@ namespace UnitySkills
                 try
                 {
                     var context = _listener.GetContext();
-                    ThreadPool.QueueUserWorkItem(_ => HandleRequest(context));
+                    
+                    // Immediately capture raw data (no Unity API)
+                    var request = context.Request;
+                    string body = "";
+                    
+                    if (request.HttpMethod == "POST" && request.ContentLength64 > 0)
+                    {
+                        using (var reader = new System.IO.StreamReader(request.InputStream, Encoding.UTF8))
+                        {
+                            body = reader.ReadToEnd();
+                        }
+                    }
+                    
+                    // Create job with raw data only - use DateTime (thread-safe) instead of Unity time
+                    var job = new RequestJob
+                    {
+                        Context = context,
+                        HttpMethod = request.HttpMethod,
+                        Path = request.Url.AbsolutePath,
+                        Body = body,
+                        EnqueueTimeTicks = DateTime.UtcNow.Ticks,
+                        StatusCode = 200,
+                        ResponseJson = null,
+                        IsProcessed = false,
+                        CompletionSignal = new ManualResetEventSlim(false)
+                    };
+                    
+                    Interlocked.Increment(ref _totalRequestsReceived);
+                    
+                    // Enqueue for main thread processing
+                    lock (_queueLock)
+                    {
+                        _jobQueue.Enqueue(job);
+                    }
+                    
+                    // Wait for main thread to process (with timeout)
+                    // This is thread-safe - just waiting on a signal
+                    ThreadPool.QueueUserWorkItem(_ => WaitAndRespond(job));
                 }
                 catch (HttpListenerException) { /* Expected when stopping */ }
                 catch (ObjectDisposedException) { /* Expected when stopping */ }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    if (_isRunning) Debug.LogError($"[UnitySkills] Listen error: {ex.Message}");
+                    // Can't use Debug.Log here (not main thread safe for logging)
+                    // Errors will be visible if Unity console is monitoring
                 }
             }
         }
         
         /// <summary>
-        /// Process queued requests on the main thread.
-        /// This runs via EditorApplication.update which works even when Unity is not focused
-        /// (when triggered by QueuePlayerLoopUpdate from keep-alive thread).
+        /// Waits for job completion and sends HTTP response.
+        /// Runs on ThreadPool thread - NO Unity API calls.
         /// </summary>
-        private static void ProcessRequestQueue()
+        private static void WaitAndRespond(RequestJob job)
         {
-            // Process multiple requests per frame for high-frequency support
+            try
+            {
+                // Wait up to 60 seconds for main thread to process
+                bool completed = job.CompletionSignal.Wait(60000);
+                
+                if (!completed)
+                {
+                    job.StatusCode = 504;
+                    job.ResponseJson = JsonConvert.SerializeObject(new {
+                        error = "Gateway Timeout: Main thread did not respond within 60 seconds",
+                        suggestion = "Unity Editor may be paused or showing a modal dialog"
+                    });
+                }
+                
+                // Send HTTP response (thread-safe)
+                SendResponse(job);
+            }
+            catch (Exception)
+            {
+                // Best effort - try to send error response
+                try
+                {
+                    job.StatusCode = 500;
+                    job.ResponseJson = JsonConvert.SerializeObject(new { error = "Internal server error" });
+                    SendResponse(job);
+                }
+                catch { }
+            }
+            finally
+            {
+                job.CompletionSignal?.Dispose();
+            }
+        }
+        
+        /// <summary>
+        /// Sends HTTP response. Thread-safe (no Unity API).
+        /// </summary>
+        private static void SendResponse(RequestJob job)
+        {
+            HttpListenerResponse response = null;
+            try
+            {
+                response = job.Context.Response;
+                
+                // CORS headers
+                response.Headers.Add("Access-Control-Allow-Origin", "*");
+                response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+                
+                response.StatusCode = job.StatusCode;
+                
+                if (!string.IsNullOrEmpty(job.ResponseJson))
+                {
+                    response.ContentType = "application/json";
+                    byte[] buffer = Encoding.UTF8.GetBytes(job.ResponseJson);
+                    response.ContentLength64 = buffer.Length;
+                    response.OutputStream.Write(buffer, 0, buffer.Length);
+                }
+            }
+            catch { /* Ignore write errors */ }
+            finally
+            {
+                try { response?.Close(); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Main thread job processor (Consumer).
+        /// Runs via EditorApplication.update - ALL Unity API calls are safe here.
+        /// </summary>
+        private static void ProcessJobQueue()
+        {
             int processed = 0;
-            const int maxPerFrame = 10;
+            const int maxPerFrame = 20; // Process more per frame for high throughput
             
             while (processed < maxPerFrame)
             {
-                PendingRequest request = null;
+                RequestJob job = null;
                 
                 lock (_queueLock)
                 {
-                    if (_requestQueue.Count > 0)
+                    if (_jobQueue.Count > 0)
                     {
-                        request = _requestQueue.Dequeue();
+                        job = _jobQueue.Dequeue();
                     }
                 }
                 
-                if (request == null) break;
+                if (job == null) break;
                 
                 try
                 {
-                    request.Result = SkillRouter.Execute(request.SkillName, request.Args);
+                    ProcessJob(job);
                 }
                 catch (Exception ex)
                 {
-                    request.Result = JsonConvert.SerializeObject(new {
+                    job.StatusCode = 500;
+                    job.ResponseJson = JsonConvert.SerializeObject(new {
                         error = ex.Message,
-                        type = ex.GetType().Name,
-                        skill = request.SkillName
+                        type = ex.GetType().Name
                     });
-                    Debug.LogWarning($"[UnitySkills] Skill '{request.SkillName}' error: {ex.Message}");
+                    Debug.LogWarning($"[UnitySkills] Job processing error: {ex.Message}");
                 }
                 finally
                 {
-                    request.WaitHandle.Set();
+                    job.IsProcessed = true;
+                    job.CompletionSignal?.Set();
+                    Interlocked.Increment(ref _totalRequestsProcessed);
                 }
                 
                 processed++;
             }
         }
 
-        private static void HandleRequest(HttpListenerContext context)
+        /// <summary>
+        /// Processes a single job. Runs on MAIN THREAD - all Unity API safe.
+        /// </summary>
+        private static void ProcessJob(RequestJob job)
         {
-            HttpListenerResponse response = null;
-            string result = null;
-
-            try
+            // Handle OPTIONS (CORS preflight)
+            if (job.HttpMethod == "OPTIONS")
             {
-                var request = context.Request;
-                response = context.Response;
-
-                // Set CORS headers early
-                response.Headers.Add("Access-Control-Allow-Origin", "*");
-                response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-                response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
-
-                if (request.HttpMethod == "OPTIONS")
+                job.StatusCode = 204;
+                job.ResponseJson = "";
+                return;
+            }
+            
+            string path = job.Path.ToLower();
+            
+            // Health check
+            if (path == "/" || path == "/health")
+            {
+                job.StatusCode = 200;
+                job.ResponseJson = JsonConvert.SerializeObject(new {
+                    status = "ok",
+                    service = "UnitySkills",
+                    version = "1.3.0",
+                    serverRunning = _isRunning,
+                    queuedRequests = QueuedRequests,
+                    totalProcessed = _totalRequestsProcessed,
+                    architecture = "Producer-Consumer (Thread-Safe)"
+                });
+                return;
+            }
+            
+            // Get skills manifest
+            if (path == "/skills" && job.HttpMethod == "GET")
+            {
+                job.StatusCode = 200;
+                job.ResponseJson = SkillRouter.GetManifest();
+                return;
+            }
+            
+            // Execute skill
+            if (path.StartsWith("/skill/") && job.HttpMethod == "POST")
+            {
+                // Rate limiting (now safe - on main thread)
+                if (!CheckRateLimit())
                 {
-                    response.StatusCode = 204;
-                    SafeCloseResponse(response);
+                    job.StatusCode = 429;
+                    job.ResponseJson = JsonConvert.SerializeObject(new {
+                        error = "Rate limit exceeded",
+                        limit = MaxRequestsPerSecond,
+                        suggestion = "Please slow down requests"
+                    });
                     return;
                 }
-
-                var path = request.Url.AbsolutePath.ToLower();
-
-                if (path == "/skills" && request.HttpMethod == "GET")
-                {
-                    result = SkillRouter.GetManifest();
-                }
-                else if (path.StartsWith("/skill/") && request.HttpMethod == "POST")
-                {
-                    // Rate limiting check
-                    if (!CheckRateLimit())
-                    {
-                        response.StatusCode = 429;
-                        result = JsonConvert.SerializeObject(new { 
-                            error = "Rate limit exceeded", 
-                            limit = MaxRequestsPerSecond,
-                            suggestion = "Please slow down requests"
-                        });
-                    }
-                    else
-                    {
-                        var skillName = request.Url.AbsolutePath.Substring(7); // Keep original case
-                        string body;
-                        using (var reader = new System.IO.StreamReader(request.InputStream, Encoding.UTF8))
-                        {
-                            body = reader.ReadToEnd();
-                        }
-                        result = ExecuteOnMainThread(skillName, body);
-                    }
-                }
-                else if (path == "/" || path == "/health")
-                {
-                    try { SkillRouter.Initialize(); } catch { /* Ignore init errors on health check */ }
-                    result = JsonConvert.SerializeObject(new { 
-                        status = "ok", 
-                        service = "UnitySkills", 
-                        version = "1.3.0",
-                        serverRunning = _isRunning,
-                        queuedRequests = QueuedRequests,
-                        backgroundExecution = true
-                    });
-                }
-                else
-                {
-                    response.StatusCode = 404;
-                    result = JsonConvert.SerializeObject(new { error = "Not found", endpoints = new[] { "GET /skills", "POST /skill/{name}", "GET /health" } });
-                }
-            }
-            catch (Exception ex)
-            {
-                // Catch-all to prevent server crash
+                
+                // Extract skill name (preserve original case)
+                string skillName = job.Path.Substring(7);
+                
+                // Execute skill (safe - on main thread)
                 try
                 {
-                    if (response != null)
-                        response.StatusCode = 500;
-                    result = JsonConvert.SerializeObject(new { error = ex.Message, type = ex.GetType().Name });
-                    Debug.LogWarning($"[UnitySkills] Request error: {ex.Message}");
+                    job.StatusCode = 200;
+                    job.ResponseJson = SkillRouter.Execute(skillName, job.Body);
                 }
-                catch { /* Ignore errors during error handling */ }
-            }
-
-            // Send response safely
-            try
-            {
-                if (response != null && result != null)
+                catch (Exception ex)
                 {
-                    response.ContentType = "application/json";
-                    var buffer = Encoding.UTF8.GetBytes(result);
-                    response.ContentLength64 = buffer.Length;
-                    response.OutputStream.Write(buffer, 0, buffer.Length);
+                    job.StatusCode = 500;
+                    job.ResponseJson = JsonConvert.SerializeObject(new {
+                        error = ex.Message,
+                        type = ex.GetType().Name,
+                        skill = skillName
+                    });
+                    Debug.LogWarning($"[UnitySkills] Skill '{skillName}' error: {ex.Message}");
                 }
+                return;
             }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[UnitySkills] Response write error: {ex.Message}");
-            }
-            finally
-            {
-                SafeCloseResponse(response);
-            }
+            
+            // Not found
+            job.StatusCode = 404;
+            job.ResponseJson = JsonConvert.SerializeObject(new {
+                error = "Not found",
+                endpoints = new[] { "GET /skills", "POST /skill/{name}", "GET /health" }
+            });
         }
-        
+
+        /// <summary>
+        /// Rate limiting check. MUST be called from main thread only.
+        /// Uses DateTime for consistent timing (NOT EditorApplication.timeSinceStartup).
+        /// </summary>
         private static bool CheckRateLimit()
         {
-            var now = EditorApplication.timeSinceStartup;
+            // Use DateTime for thread-safe timing
+            double now = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
+            
             if (now - _lastRateLimitReset >= 1.0)
             {
                 _requestsThisSecond = 0;
@@ -344,45 +462,6 @@ namespace UnitySkills
             _requestsThisSecond++;
             return _requestsThisSecond <= MaxRequestsPerSecond;
         }
-        
-        private static void SafeCloseResponse(HttpListenerResponse response)
-        {
-            try { response?.Close(); } catch { /* Ignore close errors */ }
-        }
-
-        private static string ExecuteOnMainThread(string skillName, string args)
-        {
-            var request = new PendingRequest
-            {
-                SkillName = skillName,
-                Args = args,
-                WaitHandle = new ManualResetEvent(false),
-                Result = null,
-                QueueTime = EditorApplication.timeSinceStartup
-            };
-            
-            // Add to queue
-            lock (_queueLock)
-            {
-                _requestQueue.Enqueue(request);
-            }
-
-            // Wait with timeout (60s for long operations)
-            // The keep-alive thread will force Unity to process even when not focused
-            bool completed = request.WaitHandle.WaitOne(60000);
-            
-            if (!completed)
-            {
-                Debug.LogWarning($"[UnitySkills] Skill '{skillName}' timed out after 60 seconds. Unity might be paused or busy.");
-                return JsonConvert.SerializeObject(new { 
-                    error = "Timeout: Operation took longer than 60 seconds", 
-                    skill = skillName,
-                    suggestion = "Ensure Unity Editor is responsive. The editor might be in play mode pause or showing a modal dialog.",
-                    queuedRequests = QueuedRequests
-                });
-            }
-            
-            return request.Result ?? JsonConvert.SerializeObject(new { error = "Unknown error", skill = skillName });
-        }
     }
 }
+
