@@ -21,6 +21,8 @@ namespace UnitySkills
         // Antigravity paths
         public static string AntigravityProjectPath => Path.Combine(Application.dataPath, "..", ".agent", "skills", "unity-skills");
         public static string AntigravityGlobalPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini", "antigravity", "skills", "unity-skills");
+        public static string AntigravityWorkflowProjectPath => Path.Combine(Application.dataPath, "..", ".agent", "workflows");
+        public static string AntigravityWorkflowGlobalPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini", "antigravity", "workflows");
 
         // Gemini CLI paths - folder name should match SKILL.md name field for proper recognition
         public static string GeminiProjectPath => Path.Combine(Application.dataPath, "..", ".gemini", "skills", "unity-skills");
@@ -51,7 +53,19 @@ namespace UnitySkills
             try
             {
                 var targetPath = global ? AntigravityGlobalPath : AntigravityProjectPath;
-                return InstallSkill(targetPath, "Antigravity");
+                var res = InstallSkill(targetPath, "Antigravity");
+                if (!res.success) return res;
+
+                // Install Workflow for Antigravity slash commands
+                var workflowPath = global ? AntigravityWorkflowGlobalPath : AntigravityWorkflowProjectPath;
+                if (!Directory.Exists(workflowPath))
+                    Directory.CreateDirectory(workflowPath);
+                
+                var workflowMd = GenerateAntigravityWorkflow();
+                var utf8NoBom = new UTF8Encoding(false);
+                File.WriteAllText(Path.Combine(workflowPath, "unity-skills.md"), workflowMd.Replace("\r\n", "\n"), utf8NoBom);
+                
+                return (true, targetPath);
             }
             catch (Exception ex)
             {
@@ -77,7 +91,15 @@ namespace UnitySkills
             try
             {
                 var targetPath = global ? AntigravityGlobalPath : AntigravityProjectPath;
-                return UninstallSkill(targetPath, "Antigravity");
+                var res = UninstallSkill(targetPath, "Antigravity");
+
+                // Uninstall Workflow
+                var workflowPath = global ? AntigravityWorkflowGlobalPath : AntigravityWorkflowProjectPath;
+                var workflowFile = Path.Combine(workflowPath, "unity-skills.md");
+                if (File.Exists(workflowFile))
+                    File.Delete(workflowFile);
+
+                return res;
             }
             catch (Exception ex)
             {
@@ -153,7 +175,7 @@ namespace UnitySkills
             // Gemini CLI requires: lowercase, alphanumeric and dashes only
             sb.AppendLine("name: unity-skills");
             // CRITICAL: Description must be single-line double-quoted string for Gemini CLI compatibility
-            sb.AppendLine("description: \"Control Unity Editor via REST API. Create and manage GameObjects, components, scenes, materials, prefabs, lights, UI elements, scripts, and more. Provides 100+ automation tools for Unity development.\"");
+            sb.AppendLine("description: \"Unity Editor automation via REST API. Control GameObjects, components, scenes, materials, prefabs, lights, and more with 100+ professional tools.\"");
             sb.AppendLine("---");
             sb.AppendLine();
             sb.AppendLine("# Unity Editor Control Skill");
@@ -289,6 +311,53 @@ namespace UnitySkills
             sb.AppendLine("  -H 'Content-Type: application/json' \\");
             sb.AppendLine("  -d '{\"name\":\"MyCube\", \"primitiveType\":\"Cube\"}'");
             sb.AppendLine("```");
+            return sb.ToString();
+        }
+
+        private static string GenerateAntigravityWorkflow()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("---");
+            sb.AppendLine("description: Control Unity Editor via REST API. Create GameObjects, manage scenes, components, materials, and more. 100+ automation tools.");
+            sb.AppendLine("---");
+            sb.AppendLine();
+            sb.AppendLine("# unity-skills");
+            sb.AppendLine();
+            sb.AppendLine("AI-powered Unity Editor automation through REST API. This workflow enables intelligent control of Unity Editor including GameObject manipulation, scene management, asset handling, and much more.");
+            sb.AppendLine();
+            sb.AppendLine("## Available modules");
+            sb.AppendLine();
+            sb.AppendLine("| Module | Description |");
+            sb.AppendLine("|--------|-------------|");
+            sb.AppendLine("| **gameobject** | Create, modify, find GameObjects |");
+            sb.AppendLine("| **component** | Add, remove, configure components |");
+            sb.AppendLine("| **scene** | Scene loading, saving, management |");
+            sb.AppendLine("| **material** | Material creation, HDR emission, keywords |");
+            sb.AppendLine("| **light** | Lighting setup and configuration |");
+            sb.AppendLine("| **animator** | Animation controller management |");
+            sb.AppendLine("| **ui** | UI Canvas and element creation |");
+            sb.AppendLine("| **validation**| Project validation and checking |");
+            sb.AppendLine("| **prefab** | Prefab creation and instantiation |");
+            sb.AppendLine("| **asset** | Asset import, organize, search |");
+            sb.AppendLine("| **editor** | Editor state, play mode, selection |");
+            sb.AppendLine("| **console** | Log capture and debugging |");
+            sb.AppendLine("| **script** | C# script creation and search |");
+            sb.AppendLine("| **shader** | Shader creation and listing |");
+            sb.AppendLine();
+            sb.AppendLine("## How to Use");
+            sb.AppendLine();
+            sb.AppendLine("1. **Check Unity Connection**: Ensure Unity Editor is running with the `SkillsForUnity` plugin.");
+            sb.AppendLine("2. **Invoke Skills**: Use `unity_skills.py` (located in the skill's scripts directory) to call Unity functions.");
+            sb.AppendLine();
+            sb.AppendLine("### Example Prompt");
+            sb.AppendLine("`/unity-skills create a red cube at (0, 0, 0)`");
+            sb.AppendLine();
+            sb.AppendLine("## Best Practices");
+            sb.AppendLine();
+            sb.AppendLine("- **Save Progress**: Frequently call `scene_save` during automation.");
+            sb.AppendLine("- **Undo Support**: Operations are usually undoable in Unity.");
+            sb.AppendLine("- **Domain Reload**: Be aware that creating scripts triggers a domain reload.");
+            
             return sb.ToString();
         }
 
