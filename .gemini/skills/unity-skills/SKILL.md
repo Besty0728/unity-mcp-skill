@@ -30,18 +30,6 @@ if is_unity_running():
     call_skill('material_set_color', gameObjectName='MyCube', r=1, g=0, b=0)
 ```
 
-## ⚠️ Important: Script Creation & Domain Reload
-
-When creating C# scripts with `script_create`, Unity recompiles all scripts (Domain Reload).
-The server temporarily stops during compilation and auto-restarts.
-
-```python
-# After creating a script, wait for Unity to recompile
-result = call_skill('script_create', name='MyScript', template='MonoBehaviour')
-if result.get('success'):
-    wait_for_unity(timeout=10)  # Wait for server to come back
-```
-
 ## Skills Categories
 
 | Category | Skills | Description |
@@ -90,8 +78,6 @@ if result.get('success'):
 | `component_set_property` | Set component property | `name`, `componentType`, `propertyName`, `value` |
 | `component_get_properties` | Get all properties | `name`, `componentType` |
 
-**Component Type Formats:** Simple name `"Rigidbody"` or full namespace `"UnityEngine.Rigidbody"` both work.
-
 ---
 
 ## Scene Skills
@@ -107,7 +93,7 @@ if result.get('success'):
 
 ---
 
-## Material Skills (Smart Pipeline Detection)
+## Material Skills
 
 | Skill | Description | Key Parameters |
 |-------|-------------|----------------|
@@ -130,21 +116,6 @@ if result.get('success'):
 
 ---
 
-## Asset Skills
-
-| Skill | Description | Key Parameters |
-|-------|-------------|----------------|
-| `asset_import` | Import external asset | `sourcePath`, `destinationPath` |
-| `asset_delete` | Delete an asset | `assetPath` |
-| `asset_move` | Move/rename asset | `sourcePath`, `destinationPath` |
-| `asset_duplicate` | Duplicate asset | `assetPath` |
-| `asset_find` | Find assets | `searchFilter`, `limit` |
-| `asset_create_folder` | Create folder | `folderPath` |
-| `asset_refresh` | Refresh AssetDatabase | (none) |
-| `asset_get_info` | Get asset information | `assetPath` |
-
----
-
 ## Light Skills
 
 | Skill | Description | Key Parameters |
@@ -154,8 +125,6 @@ if result.get('success'):
 | `light_get_info` | Get light information | `name` |
 | `light_find_all` | Find all lights | `lightType`, `limit` |
 | `light_set_enabled` | Enable/disable light | `name`, `enabled` |
-
-**Light Types:** `Directional`, `Point`, `Spot`, `Area`
 
 ---
 
@@ -171,8 +140,6 @@ if result.get('success'):
 | `animator_get_info` | Get Animator info | `name` |
 | `animator_assign_controller` | Assign controller | `name`, `controllerPath` |
 | `animator_list_states` | List states in controller | `controllerPath`, `layer` |
-
-**Parameter Types:** `float`, `int`, `bool`, `trigger`
 
 ---
 
@@ -190,8 +157,6 @@ if result.get('success'):
 | `ui_create_toggle` | Create Toggle | `name`, `parent`, `label`, `isOn` |
 | `ui_set_text` | Set text content | `name`, `text` |
 | `ui_find_all` | Find all UI elements | `uiType`, `limit` |
-
-**Render Modes:** `ScreenSpaceOverlay`, `ScreenSpaceCamera`, `WorldSpace`
 
 ---
 
@@ -236,16 +201,6 @@ if result.get('success'):
 
 ---
 
-## Shader Skills
-
-| Skill | Description | Key Parameters |
-|-------|-------------|----------------|
-| `shader_create` | Create shader file | `shaderName`, `savePath`, `template` |
-| `shader_read` | Read shader source | `shaderPath` |
-| `shader_list` | List all shaders | `filter`, `limit` |
-
----
-
 ## Validation Skills
 
 | Skill | Description | Key Parameters |
@@ -268,60 +223,3 @@ if result.get('success'):
 | `project_get_render_pipeline` | Get render pipeline type | (none) |
 | `project_list_shaders` | List available shaders | `filter`, `limit` |
 | `project_get_quality_settings` | Get quality settings | (none) |
-
----
-
-## Workflow Examples
-
-### Create a Simple Scene
-```python
-# Create ground
-call_skill("gameobject_create", name="Ground", primitiveType="Plane", x=0, y=0, z=0)
-call_skill("gameobject_set_transform", name="Ground", scaleX=10, scaleZ=10)
-
-# Create player
-call_skill("gameobject_create", name="Player", primitiveType="Cube", x=0, y=1, z=0)
-call_skill("material_set_color", name="Player", r=0, g=0.5, b=1)
-
-# Add lighting
-call_skill("light_create", name="Sun", lightType="Directional", intensity=1)
-call_skill("light_create", name="Fill", lightType="Point", x=5, y=3, z=5, intensity=0.5)
-```
-
-### Build UI Menu
-```python
-call_skill("ui_create_canvas", name="MainMenu")
-call_skill("ui_create_text", name="Title", parent="MainMenu", text="My Game", fontSize=48)
-call_skill("ui_create_button", name="PlayBtn", parent="MainMenu", text="Play")
-call_skill("ui_create_button", name="QuitBtn", parent="MainMenu", text="Quit")
-```
-
----
-
-## Raw HTTP API
-
-```bash
-# List all skills
-curl http://localhost:8080/skills
-
-# Execute skill
-curl -X POST http://localhost:8080/skill/gameobject_create \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Cube1", "primitiveType": "Cube", "x": 1, "y": 2, "z": 3}'
-```
-
-## Response Format
-
-```json
-{
-  "status": "success",
-  "skill": "gameobject_create",
-  "result": {
-    "success": true,
-    "name": "Cube1",
-    "instanceId": 12345,
-    "path": "/Cube1",
-    "position": {"x": 1, "y": 2, "z": 3}
-  }
-}
-```
