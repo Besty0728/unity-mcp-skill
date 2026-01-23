@@ -266,7 +266,7 @@ if result.get('success'):
 | **Antigravity** | ✅ | 支持 `/unity-skills` 斜杠命令 |
 | **Claude Code** | ✅ | 智能识别 Skill 意图 |
 | **Gemini CLI** | ✅ | 实验性 `experimental.skills` 支持 |
-| **OpenAI Codex** | ✅ | 支持 `$skill` 显式调用和隐式识别 |
+| **Codex** | ✅ | 支持 `$skill` 显式调用和隐式识别 |
 
 ---
 

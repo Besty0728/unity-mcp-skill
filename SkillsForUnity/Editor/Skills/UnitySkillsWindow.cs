@@ -551,9 +551,9 @@ namespace UnitySkills
 
             EditorGUILayout.Space(10);
 
-            // OpenAI Codex
+            // Codex
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("OpenAI Codex", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Codex", EditorStyles.boldLabel);
             
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField(L("install_project") + ":", GUILayout.Width(100));
@@ -570,7 +570,7 @@ namespace UnitySkills
                 }
                 if (GUILayout.Button(L("uninstall"), GUILayout.Width(60)))
                 {
-                    if (EditorUtility.DisplayDialog(L("uninstall"), string.Format(L("uninstall_confirm"), "OpenAI Codex (Project)"), "OK", "Cancel"))
+                    if (EditorUtility.DisplayDialog(L("uninstall"), string.Format(L("uninstall_confirm"), "Codex (Project)"), "OK", "Cancel"))
                     {
                         var result = SkillInstaller.UninstallCodex(false);
                         if (result.success)
@@ -586,7 +586,11 @@ namespace UnitySkills
                 {
                     var result = SkillInstaller.InstallCodex(false);
                     if (result.success)
-                        EditorUtility.DisplayDialog("Success", L("install_success") + "\n" + result.message, "OK");
+                        EditorUtility.DisplayDialog("Success", 
+                            Localization.Current == Localization.Language.Chinese
+                                ? "安装成功！\n" + result.message + "\n\n如有问题请查看项目根目录的 AGENTS.md"
+                                : "Install success!\n" + result.message + "\n\nIf issues occur, check AGENTS.md in project root.",
+                            "OK");
                     else
                         EditorUtility.DisplayDialog("Error", string.Format(L("install_failed"), result.message), "OK");
                 }
@@ -608,7 +612,7 @@ namespace UnitySkills
                 }
                 if (GUILayout.Button(L("uninstall"), GUILayout.Width(60)))
                 {
-                    if (EditorUtility.DisplayDialog(L("uninstall"), string.Format(L("uninstall_confirm"), "OpenAI Codex (Global)"), "OK", "Cancel"))
+                    if (EditorUtility.DisplayDialog(L("uninstall"), string.Format(L("uninstall_confirm"), "Codex (Global)"), "OK", "Cancel"))
                     {
                         var result = SkillInstaller.UninstallCodex(true);
                         if (result.success)
@@ -624,7 +628,11 @@ namespace UnitySkills
                 {
                     var result = SkillInstaller.InstallCodex(true);
                     if (result.success)
-                        EditorUtility.DisplayDialog("Success", L("install_success") + "\n" + result.message, "OK");
+                        EditorUtility.DisplayDialog("Success", 
+                            Localization.Current == Localization.Language.Chinese
+                                ? "安装成功！\n" + result.message + "\n\n请重启 Codex 以加载新 Skill。"
+                                : "Install success!\n" + result.message + "\n\nPlease restart Codex to load new skills.",
+                            "OK");
                     else
                         EditorUtility.DisplayDialog("Error", string.Format(L("install_failed"), result.message), "OK");
                 }

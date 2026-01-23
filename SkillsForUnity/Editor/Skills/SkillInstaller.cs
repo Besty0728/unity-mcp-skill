@@ -28,7 +28,7 @@ namespace UnitySkills
         public static string GeminiProjectPath => Path.Combine(Application.dataPath, "..", ".gemini", "skills", "unity-skills");
         public static string GeminiGlobalPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini", "skills", "unity-skills");
 
-        // OpenAI Codex paths - https://developers.openai.com/codex/skills
+        // Codex paths - https://developers.openai.com/codex/skills
         public static string CodexProjectPath => Path.Combine(Application.dataPath, "..", ".codex", "skills", "unity-skills");
         public static string CodexGlobalPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "skills", "unity-skills");
 
@@ -144,7 +144,16 @@ namespace UnitySkills
             try
             {
                 var targetPath = global ? CodexGlobalPath : CodexProjectPath;
-                return InstallSkill(targetPath, "OpenAI Codex");
+                var res = InstallSkill(targetPath, "Codex");
+                if (!res.success) return res;
+
+                // For project-level install, also update AGENTS.md
+                if (!global)
+                {
+                    UpdateAgentsMd();
+                }
+                
+                return res;
             }
             catch (Exception ex)
             {
@@ -157,11 +166,77 @@ namespace UnitySkills
             try
             {
                 var targetPath = global ? CodexGlobalPath : CodexProjectPath;
-                return UninstallSkill(targetPath, "OpenAI Codex");
+                var res = UninstallSkill(targetPath, "Codex");
+
+                // For project-level uninstall, also remove from AGENTS.md
+                if (!global)
+                {
+                    RemoveFromAgentsMd();
+                }
+
+                return res;
             }
             catch (Exception ex)
             {
                 return (false, ex.Message);
+            }
+        }
+
+        private static string AgentsMdPath => Path.Combine(Application.dataPath, "..", "AGENTS.md");
+        private const string UnitySkillsEntry = "- unity-skills: Unity Editor automation via REST API";
+
+        private static void UpdateAgentsMd()
+        {
+            var agentsPath = AgentsMdPath;
+            var utf8NoBom = new UTF8Encoding(false);
+
+            if (File.Exists(agentsPath))
+            {
+                // File exists, check if unity-skills is already declared
+                var content = File.ReadAllText(agentsPath);
+                if (!content.Contains("unity-skills"))
+                {
+                    // Append unity-skills entry
+                    var appendContent = "\n\n## UnitySkills\n" + UnitySkillsEntry + "\n";
+                    File.AppendAllText(agentsPath, appendContent.Replace("\r\n", "\n"), utf8NoBom);
+                    Debug.Log("[UnitySkills] Added unity-skills to existing AGENTS.md");
+                }
+                else
+                {
+                    Debug.Log("[UnitySkills] unity-skills already declared in AGENTS.md");
+                }
+            }
+            else
+            {
+                // Create new AGENTS.md
+                var newContent = @"# AGENTS.md
+
+This file declares available skills for AI agents like Codex.
+
+## UnitySkills
+" + UnitySkillsEntry + "\n";
+                File.WriteAllText(agentsPath, newContent.Replace("\r\n", "\n"), utf8NoBom);
+                Debug.Log("[UnitySkills] Created AGENTS.md with unity-skills declaration");
+            }
+        }
+
+        private static void RemoveFromAgentsMd()
+        {
+            var agentsPath = AgentsMdPath;
+            if (!File.Exists(agentsPath)) return;
+
+            var content = File.ReadAllText(agentsPath);
+            if (content.Contains("unity-skills"))
+            {
+                // Remove unity-skills related lines
+                var lines = content.Split('\n').ToList();
+                lines.RemoveAll(l => l.Contains("unity-skills") || l.Trim() == "## UnitySkills");
+                
+                // Clean up empty consecutive lines
+                var cleanedContent = string.Join("\n", lines).Trim() + "\n";
+                var utf8NoBom = new UTF8Encoding(false);
+                File.WriteAllText(agentsPath, cleanedContent.Replace("\r\n", "\n"), utf8NoBom);
+                Debug.Log("[UnitySkills] Removed unity-skills from AGENTS.md");
             }
         }
 

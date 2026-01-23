@@ -35,7 +35,7 @@
 | **Antigravity** | ✅ 完美支持 | 支持 `/unity-skills` 斜杠命令，原生集成工作流。 |
 | **Claude Code** | ✅ 完美支持 | 智能识别 Skill 意图，支持复杂多步自动化。 |
 | **Gemini CLI** | ✅ 完美支持 | 实验性支持，适配最新 `experimental.skills` 规范。 |
-| **OpenAI Codex** | ✅ 完美支持 | 支持 `$skill` 显式调用和隐式意图识别。 |
+| **Codex** | ✅ 完美支持 | 支持 `$skill` 显式调用和隐式意图识别。 |
 
 ---
 
@@ -52,13 +52,15 @@ https://github.com/Besty0728/Unity-Skills.git?path=/SkillsForUnity
 
 ### 3. 一键配置 AI Skills
 1. 打开 `Window > UnitySkills > Skill Installer`。
-2. 选择对应的终端图标（Claude / Antigravity / Gemini）。
+2. 选择对应的终端图标（Claude / Antigravity / Gemini / Codex）。
 3. 点击 **"Install"** 即可完成环境配置，无需手动拷贝代码。
 
 > 安装器落盘文件说明（生成于目标目录）：
 > - `SKILL.md`
 > - `scripts/unity_skills.py`
 > - Antigravity 额外生成 `workflows/unity-skills.md`
+
+> **Codex 特别说明**：推荐使用**全局安装**。项目级安装需要在 `AGENTS.md` 中声明才能识别，全局安装后重启 Codex 即可。
 
 📘 需要更完整的安装与使用说明，请查看：[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)
 
