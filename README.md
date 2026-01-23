@@ -79,7 +79,7 @@ https://github.com/Besty0728/Unity-Skills.git?path=/SkillsForUnity
 以下为已验证的默认目录（若工具配置过自定义路径，请以自定义为准）：
 
 - Claude Code：`~/.claude/skills/`
-- Antigravity：`~/.antigravity/skills/`
+- Antigravity：`~/.agent/skills/`
 - Gemini CLI：`~/.gemini/skills/`
 
 #### 🧩 其他支持 Skills 的工具
