@@ -16,17 +16,12 @@ from typing import Any, Dict, Optional
 
 UNITY_URL = "http://localhost:8090"
 
-def setup_utf8_output():
-    """设置标准输出为UTF-8编码，解决Windows控制台中文乱码问题"""
-    if sys.platform == 'win32':
-        try:
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-        except:
-            pass  # 如果失败就使用默认编码
-
-# 立即调用，在模块导入时自动设置
-setup_utf8_output()
+# 确保UTF-8编码输出（Windows兼容）
+if sys.platform == 'win32':
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 def get_registry_path():
     import os
@@ -85,21 +80,46 @@ class UnitySkills:
     def call(self, skill_name: str, verbose: bool = False, **kwargs) -> Dict[str, Any]:
         """
         Call a skill on this instance.
-        Args:
-            skill_name: Name of skill
-            verbose: If True, returns full details. If False (default), returns summary for large datasets.
-            **kwargs: Skill parameters
+        
+        Returns a normalized response with 'success' field and flattened result data.
         """
         try:
             # Combine verbose into kwargs for JSON body
             kwargs['verbose'] = verbose
             response = requests.post(f"{self.url}/skill/{skill_name}", json=kwargs, timeout=30)
-            response.encoding = 'utf-8'  # 强制 UTF-8 解码，确保中文正确显示
-            return response.json()
+            response.encoding = 'utf-8'  # 确保正确解码UTF-8
+
+            data = response.json()
+
+            # 规范化响应格式：将 {"status": "success", "result": {...}} 转换为 {"success": True, ...}
+            if data.get('status') == 'success':
+                result = data.get('result', {})
+                # 将result的内容提升到顶层，并添加success标志
+                normalized = {'success': True}
+                if isinstance(result, dict):
+                    normalized.update(result)
+                else:
+                    normalized['result'] = result
+                return normalized
+            elif data.get('status') == 'error':
+                return {
+                    'success': False,
+                    'error': data.get('error', 'Unknown error'),
+                    'message': data.get('message', '')
+                }
+            else:
+                # 返回原始数据（向后兼容）
+                return data
+
         except requests.exceptions.ConnectionError:
-             return {"status": "error", "error": f"Connection failed to {self.url}. Unity instance may be down."}
+             return {
+                'success': False,
+                'error': f"Cannot connect to {self.url}. Unity instance may be down.",
+                'suggestion': 'Unity may be recompiling scripts (Domain Reload). Wait 3-5 seconds and retry.',
+                'hint': 'Check if server is running: Window > UnitySkills > Start Server'
+            }
         except Exception as e:
-            return {"status": "error", "error": str(e)}
+            return {'success': False, 'error': str(e)}
 
     # --- Proxies for common skills ---
     def create_cube(self, x=0, y=0, z=0, name="Cube"): return self.call("create_cube", x=x, y=y, z=z, name=name)
@@ -140,6 +160,19 @@ def call_skill(skill_name: str, **kwargs) -> Dict[str, Any]:
     return _default_client.call(skill_name, **kwargs)
 
 
+def call_skill_with_retry(skill_name: str, max_retries: int = 3, retry_delay: float = 2.0, **kwargs) -> Dict[str, Any]:
+    """Call a Unity skill with automatic retry logic for Domain Reload scenarios."""
+    import time
+    for attempt in range(max_retries):
+        result = call_skill(skill_name, **kwargs)
+        # 检查success字段而不是error字段
+        if result.get('success') or ('error' not in result or 'Cannot connect' not in result.get('error', '')):
+            return result
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+    return result
+
+
 def get_skills() -> Dict[str, Any]:
     """Get list of all available skills."""
     try:
@@ -154,6 +187,7 @@ def health() -> bool:
     """Check if Unity server is running."""
     try:
         response = requests.get(f"{UNITY_URL}/health", timeout=2)
+        response.encoding = 'utf-8'
         return response.json().get("status") == "ok"
     except:
         return False
