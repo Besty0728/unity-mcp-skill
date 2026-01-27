@@ -3,7 +3,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-2021.3%2B-black?style=for-the-badge&logo=unity" alt="Unity">
-  <img src="https://img.shields.io/badge/Skills-117%2B-green?style=for-the-badge" alt="Skills">
+  <img src="https://img.shields.io/badge/Skills-190%2B-green?style=for-the-badge" alt="Skills">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License"></a>
 </p>
 
@@ -100,19 +100,28 @@ https://github.com/Besty0728/Unity-Skills.git?path=/SkillsForUnity#beta
 
 ---
 
-## 📦 Skills 分类概要 (117+)
+## 📦 Skills 分类概要 (190+)
 
 | 分类 | 数量 | 核心功能 |
 | :--- | :---: | :--- |
-| **GameObject** | 10 | 增删改查、层级管理、**批量复制/重命名**。 |
-| **Component** | 8 | 智能组件挂载、属性劫持与配置、批量操作。 |
-| **Scene** | 6 | 场景无缝切换、状态保存、高清截图。 |
-| **Material** | 17 | HDR 发光控制、材质球属性批量修改。 |
-| **Light** | 7 | 灯光创建/配置、**批量开关/属性设置**。 |
-| **UI System** | 10 | 响应式 Canvas 构建、Button/Text 组件生成。 |
-| **Editor** | 12 | 播放模式、选择、撤销重做、**上下文获取**。 |
-| **Importer** | 9 | 纹理/音频/模型导入设置调整。 |
-| **Others** | 38+ | 涵盖 Animator, Prefab, Validation, Console 等。 |
+| **Material** | 21 | 材质属性批量修改/HDR/PBR设置 |
+| **GameObject** | 18 | 创建/查找/变换同步/批量操作/层级管理 |
+| **Editor** | 12 | 播放模式/选择/撤销重做/上下文获取 |
+| **Asset** | 11 | 资产导入/搜索/文件夹/GUID管理 |
+| **UI System** | 11 | Canvas/Button/Text/Slider/RectTransform |
+| **Component** | 8 | 添加/移除/属性配置/复制粘贴 |
+| **Animator** | 8 | 动画控制器/参数/状态机/过渡 |
+| **Sample** | 8 | 示例场景/测试用例生成 |
+| **Light** | 7 | 灯光创建/类型配置/强度颜色/批量开关 |
+| **Validation** | 7 | 项目验证/空文件夹清理/引用检测 |
+| **Scene** | 6 | 场景切换/保存/加载/截图 |
+| **Script** | 6 | C# 脚本创建/编译检查/搜索 |
+| **Shader** | 6 | Shader 查找/创建/属性列举 |
+| **Prefab** | 5 | 预制体创建/实例化/应用更改 |
+| **Console** | 5 | 日志捕获/清理/输出监视 |
+| **Debug** | 5 | 调试绘图/射线/Gizmos |
+| **Cinemachine** | 5 | 虚拟相机创建/跟随/噪声配置 |
+| **Others** | 41+ | ScriptableObject, Physics, Project, Camera, NavMesh, Timeline, Importer 等 |
 
 > ⚠️ 大部分模块支持 `*_batch` 批量操作，操作多个物体时应优先使用批量 Skills 以提升性能。
 
@@ -125,10 +134,13 @@ https://github.com/Besty0728/Unity-Skills.git?path=/SkillsForUnity#beta
 ├── SkillsForUnity/                 # Unity 编辑器插件 (Package 核心)
 │   └── Editor/Skills/              # 核心 Skill 逻辑与 C# 安装器
 │       ├── EditorSkills.cs         # 编辑器控制 (含 editor_get_context)
-│       ├── TextureSkills.cs        # 纹理导入设置 [v1.2 新增]
-│       ├── AudioSkills.cs          # 音频导入设置 [v1.2 新增]
-│       ├── ModelSkills.cs          # 模型导入设置 [v1.2 新增]
-│       └── ...                     # 其他 Skills 模块
+│       ├── NavMeshSkills.cs        # 导航网格烘焙与代理 [New]
+│       ├── CinemachineSkills.cs    # 虚拟相机控制 [New]
+│       ├── TimelineSkills.cs       # 时间轴管理 [New]
+│       ├── TextureSkills.cs        # 纹理导入设置
+│       ├── AudioSkills.cs          # 音频导入设置
+│       ├── ModelSkills.cs          # 模型导入设置
+│       └── ...                     # 190+ Skills 源码
 ├── unity-skills/                   # 跨平台 AI Skill 模板 (核心源码)
 │   ├── SKILL.md                    # Skill 定义与 Prompt 设计
 │   ├── scripts/                    # Python Helper 封装
