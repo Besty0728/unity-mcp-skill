@@ -13,8 +13,28 @@ All notable changes to **UnitySkills** will be documented in this file.
 - **Chinese Character Support / 中文字符支持**:
     - Fixed JSON serialization escaping Unicode characters, causing Chinese names to display as garbled text in AI terminals. / 修复 JSON 序列化转义 Unicode 字符导致中文名称在 AI 终端显示乱码。
     - Added `charset=utf-8` to HTTP Content-Type header. / HTTP 响应头添加 charset=utf-8 声明。
-    - Added unified `JsonSettings.cs` for consistent JSON serialization. / 新增统一的 JsonSettings.cs 配置。
     - Python client now forces UTF-8 decoding. / Python 客户端强制 UTF-8 解码。
+
+### 🌟 New Skills / 新增技能
+
+- **Cinemachine Support**:
+    - Full control over Virtual Cameras: Create, inspect, and modify properties via reflection. / 支持 Cinemachine 虚拟相机创建、属性深度修改。
+    - `cinemachine_set_vcam_property` allows adjusting almost any value. / 支持任意数值调整。
+- **Timeline Support**:
+    - Create Timelines, add Audio/Animation tracks and bind objects. / 支持创建 Timeline 及添加音轨/动画轨。
+- **Console & Debugging**:
+    - Capture and retrieve Unity console logs for self-correction. / 支持捕获 Unity 控制台日志以进行自我纠错。
+    - `console_get_logs`, `console_clear` allow AI to see errors. / AI 可读取报错信息。
+- **Profiler & Performance**:
+    - Get real-time stats including FPS, memory, draw calls. / 获取实时 FPS、内存、DrawCall 等性能数据。
+- **Physics Perception**:
+    - Spatial awareness via Raycast and OverlapSphere. / 通过射线和重叠球进行空间感知。
+    - `physics_check_overlap` to find nearby objects. / 查找附近物体。
+- **Event System**:
+    - Inspect and modify UnityEvents (e.g. Button.onClick) at runtime/editor. / 运行时/编辑器内省和修改 UnityEvent。
+    - Support for adding listeners with int, float, string, bool, void arguments. / 支持添加各种类型的事件监听。
+- **NavMesh**:
+    - Bake NavMesh, clear data, and calculate paths. / 烘焙导航网格、清除数据、计算路径。
 
 ### 📝 Documentation Improvements / 文档优化
 
