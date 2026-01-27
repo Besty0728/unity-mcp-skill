@@ -13,14 +13,14 @@ namespace UnitySkills
         [UnitySkill("navmesh_bake", "Bake the NavMesh (Synchronous). Warning: Can be slow.")]
         public static object NavMeshBake()
         {
-            NavMeshBuilder.BuildNavMesh();
+            UnityEditor.AI.NavMeshBuilder.BuildNavMesh();
             return new { success = true, message = "NavMesh baked successfully" };
         }
 
         [UnitySkill("navmesh_clear", "Clear the NavMesh data")]
         public static object NavMeshClear()
         {
-            NavMeshBuilder.ClearAllNavMeshes();
+            UnityEditor.AI.NavMeshBuilder.ClearAllNavMeshes();
             return new { success = true, message = "NavMesh cleared" };
         }
 

@@ -20,15 +20,17 @@ namespace UnitySkills
             
             return new
             {
-                fps = UnityStats.fps,
+                // UnityStats only provides these properties
                 frameTime = UnityStats.frameTime,
+                renderTime = UnityStats.renderTime,
                 triangles = UnityStats.triangles,
                 vertices = UnityStats.vertices,
                 batches = UnityStats.batches,
                 setPassCalls = UnityStats.setPassCalls,
                 drawCalls = UnityStats.drawCalls,
-                visibleSkinnedMeshes = UnityStats.visibleSkinnedMeshes,
-                visibleAnimations = UnityStats.visibleAnimationComponents,
+                dynamicBatchedDrawCalls = UnityStats.dynamicBatchedDrawCalls,
+                staticBatchedDrawCalls = UnityStats.staticBatchedDrawCalls,
+                instancedBatchedDrawCalls = UnityStats.instancedBatchedDrawCalls,
                 memory = new
                 {
                     totalAllocatedMB = totalAllocatedMemory / (1024f * 1024f),
